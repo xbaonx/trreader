@@ -14,6 +14,23 @@ const gpt = require('./gpt');
 const imageService = require('./image-service');
 const adminRoutes = require('./admin-routes');
 
+// Ensure debug-composite exists before importing
+let debugComposite;
+try {
+  debugComposite = require('./debug-composite');
+  console.log('Debug composite module loaded successfully');
+} catch (error) {
+  console.error('Failed to load debug-composite module:', error.message);
+  // Create a stub if module not found
+  debugComposite = {
+    testCompositeCreation: async () => ({
+      success: false,
+      error: 'Debug module not loaded properly'
+    }),
+    logDebug: (msg) => console.log('Debug log:', msg)
+  };
+}
+
 // Load environment variables
 dotenv.config();
 
