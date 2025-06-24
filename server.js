@@ -462,27 +462,45 @@ app.post('/api/webhook', async (req, res) => {
       }
     }));
     
-    res.json({
-      "messages": [
-        { "text": `Dưới đây là ${cardCount} lá bài của bạn:` },
-        ...cardMessages,
-        { 
-          "attachment": {
-            "type": "template",
-            "payload": {
-              "template_type": "button",
-              "text": "Bạn có muốn xem kết quả đọc bài không?",
-              "buttons": [
-                {
-                  "type": "json_plugin_url",
-                  "url": `${baseUrl}/api/result?session=${newSession.id}`,
-                  "title": "Xem kết quả"
-                }
-              ]
-            }
+    // Tạo mảng messages cho response JSON
+    const messages = [
+      { "text": `Dưới đây là ${cardCount} lá bài của bạn:` },
+      ...cardMessages
+    ];
+    
+    // Thêm ảnh ghép vào response nếu có
+    if (compositeImageUrl) {
+      messages.push({ "text": "👆 Đây là ảnh ghép 3 lá bài của bạn" });
+      messages.push({
+        "attachment": {
+          "type": "image",
+          "payload": {
+            "url": `${baseUrl}${compositeImageUrl}`
           }
         }
-      ],
+      });
+    }
+    
+    // Thêm nút xem kết quả
+    messages.push({ 
+      "attachment": {
+        "type": "template",
+        "payload": {
+          "template_type": "button",
+          "text": "Bạn có muốn xem kết quả đọc bài không?",
+          "buttons": [
+            {
+              "type": "json_plugin_url",
+              "url": `${baseUrl}/api/result?session=${newSession.id}`,
+              "title": "Xem kết quả"
+            }
+          ]
+        }
+      }
+    });
+    
+    res.json({
+      "messages": messages,
       "session_id": newSession.id
     });
     
