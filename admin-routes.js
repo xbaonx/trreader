@@ -344,7 +344,10 @@ module.exports = function(db, gpt, upload) {
    */
   router.get('/cards', (req, res) => {
     try {
-      const imageDir = path.join(process.cwd(), 'public', 'images');
+      // Sử dụng /mnt/data/images trong môi trường production
+      const imageDir = process.env.NODE_ENV === 'production'
+        ? path.join('/mnt/data', 'images')
+        : path.join(process.cwd(), 'public', 'images');
       const files = fs.readdirSync(imageDir).filter(file => 
         file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png')
       );
@@ -401,7 +404,10 @@ module.exports = function(db, gpt, upload) {
         });
       }
       
-      const imagePath = path.join(process.cwd(), 'public', 'images', filename);
+      // Sử dụng /mnt/data/images trong môi trường production
+      const imagePath = process.env.NODE_ENV === 'production'
+        ? path.join('/mnt/data', 'images', filename)
+        : path.join(process.cwd(), 'public', 'images', filename);
       
       // Kiểm tra file tồn tại
       if (!fs.existsSync(imagePath)) {

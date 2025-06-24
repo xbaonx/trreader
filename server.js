@@ -32,15 +32,37 @@ app.set('views', path.join(__dirname, 'views'));
 // Đảm bảo cấu trúc dữ liệu được khởi tạo
 db.ensureDataStructure();
 
-// Đảm bảo thư mục images tồn tại
-fs.ensureDirSync(path.join(__dirname, 'public', 'images'));
+// Đảm bảo thư mục images tồn tại trong persistent disk và tạo symbolic link
+const imagesDir = path.join(__dirname, 'public', 'images');
+const persistentImagesDir = path.join('/mnt/data', 'images');
+
+// Đảm bảo thư mục persistent disk tồn tại
+fs.ensureDirSync(persistentImagesDir);
+
+// Xóa thư mục images cũ nếu tồn tại (có thể là thư mục trống hoặc symbolic link cũ)
+if (fs.existsSync(imagesDir)) {
+  fs.removeSync(imagesDir);
+}
+
+// Tạo symbolic link từ public/images đến /mnt/data/images
+try {
+  fs.symlinkSync(persistentImagesDir, imagesDir, 'dir');
+  console.log('Symbolic link created from', imagesDir, 'to', persistentImagesDir);
+} catch (error) {
+  console.error('Error creating symbolic link:', error);
+  // Nếu không thể tạo symlink (ví dụ: trên Windows hoặc quyền không đủ), tạo thư mục thường
+  fs.ensureDirSync(imagesDir);
+  console.log('Created regular directory instead:', imagesDir);
+}
 
 /**
  * Cấu hình Multer cho upload ảnh
  */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, 'public/images');
+    const uploadPath = process.env.NODE_ENV === 'production'
+      ? path.join('/mnt/data', 'images')
+      : path.join(__dirname, 'public/images');
     fs.ensureDirSync(uploadPath);
     cb(null, uploadPath);
   },
@@ -49,7 +71,9 @@ const storage = multer.diskStorage({
     const fileName = file.originalname.toLowerCase().replace(/ /g, '_');
     
     // Kiểm tra trùng lặp tên file
-    const uploadPath = path.join(__dirname, 'public/images');
+    const uploadPath = process.env.NODE_ENV === 'production'
+      ? path.join('/mnt/data', 'images')
+      : path.join(__dirname, 'public/images');
     fs.readdir(uploadPath, (err, files) => {
       if (err) {
         return cb(err);
