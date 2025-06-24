@@ -1,6 +1,16 @@
 /**
  * db.js - Module quản lý dữ liệu lưu trữ trong db.json
  * File db.json có cấu trúc: { sessions: [...], config: {...} }
+ * 
+ * Cấu trúc sessions bao gồm các trường:
+ * - id: ID phiên duy nhất
+ * - uid: ID người dùng
+ * - name: Họ tên người dùng (mới thêm)
+ * - dob: Ngày tháng năm sinh (mới thêm, định dạng YYYY-MM-DD)
+ * - timestamp: Thời gian tạo phiên
+ * - cards: Các lá bài được rút
+ * - paid: Trạng thái thanh toán
+ * - gptResult: Kết quả đọc bài từ GPT
  */
 
 const fs = require('fs-extra');
@@ -16,7 +26,7 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 const DEFAULT_DB = {
   sessions: [],
   config: {
-    prompt: `Bạn là chuyên gia tarot reader với nhiều năm kinh nghiệm. Hãy phân tích ý nghĩa của các lá bài tarot dưới đây và đưa ra lời giải cho người dùng. Hãy nhớ rằng mỗi lá bài mang một năng lượng và thông điệp riêng, và sự kết hợp giữa chúng tạo ra một câu chuyện hoàn chỉnh.`,
+    prompt: `Bạn là chuyên gia tarot reader với nhiều năm kinh nghiệm. Hãy phân tích ý nghĩa của các lá bài tarot dưới đây và đưa ra lời giải cho người dùng có tên là {{name}} và sinh ngày {{dob}}. Hãy nhớ rằng mỗi lá bài mang một năng lượng và thông điệp riêng, và sự kết hợp giữa chúng tạo ra một câu chuyện hoàn chỉnh dành cho {{name}}.`,
     responseTemplate: `# Kết Quả Đọc Bài Tarot
 
 ## Phân tích tổng quát
@@ -168,21 +178,22 @@ function getLatestSessionByUid(uid) {
  * @param {Object} session - Session cần thêm
  * @returns {Object} Session đã thêm với ID mới
  */
-function addSession(session) {
+function addSession(sessionData) {
   const db = readDB();
   
-  // Tạo session mới với ID và timestamp
   const newSession = {
     id: uuidv4(),
+    uid: sessionData.uid,
+    name: sessionData.name || 'Khách',  // Trường mới: họ tên
+    dob: sessionData.dob || '',         // Trường mới: ngày sinh
     timestamp: new Date().toISOString(),
-    paid: false,
-    gptResult: null,
-    ...session
+    cards: sessionData.cards,
+    paid: sessionData.paid || false,
+    gptResult: sessionData.gptResult || null,
   };
   
-  db.sessions.unshift(newSession); // Thêm vào đầu mảng để dễ dàng lấy các session mới nhất
+  db.sessions.push(newSession);
   saveDB(db);
-  
   return newSession;
 }
 
@@ -192,17 +203,25 @@ function addSession(session) {
  * @param {Object} updates - Dữ liệu cập nhật
  * @returns {Object|null} Session đã cập nhật hoặc null nếu không tìm thấy
  */
-function updateSession(id, updates) {
+function updateSession(id, updatedData) {
   const db = readDB();
-  const index = db.sessions.findIndex(session => session.id === id);
   
+  const index = db.sessions.findIndex(session => session.id === id);
   if (index === -1) return null;
   
-  // Cập nhật session
-  db.sessions[index] = {
-    ...db.sessions[index],
-    ...updates
-  };
+  // Chỉ cập nhật các trường được phép
+  if (updatedData.paid !== undefined) db.sessions[index].paid = updatedData.paid;
+  if (updatedData.gptResult) {
+    db.sessions[index].gptResult = updatedData.gptResult;
+    db.sessions[index].editedAt = new Date().toISOString();
+  }
+  if (updatedData.name) db.sessions[index].name = updatedData.name;
+  if (updatedData.dob) db.sessions[index].dob = updatedData.dob;
+  
+  // Đánh dấu thời gian duyệt nếu được thanh toán
+  if (updatedData.paid && !db.sessions[index].approvedAt) {
+    db.sessions[index].approvedAt = new Date().toISOString();
+  }
   
   saveDB(db);
   return db.sessions[index];

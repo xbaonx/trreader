@@ -145,10 +145,15 @@ app.get('/', (req, res) => {
  */
 app.post('/draw', (req, res) => {
   try {
-    const { uid } = req.body;
+    const { uid, name, dob } = req.body;
     
     if (!uid) {
       return res.status(400).json({ error: 'User ID là bắt buộc' });
+    }
+    
+    // Kiểm tra định dạng ngày sinh nếu được cung cấp
+    if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+      return res.status(400).json({ error: 'Ngày sinh phải có định dạng YYYY-MM-DD' });
     }
     
     // Lấy cấu hình
@@ -210,7 +215,9 @@ app.post('/draw', (req, res) => {
     res.json({ 
       success: true, 
       sessionId: newSession.id,
-      cards: selectedCards 
+      cards: selectedCards,
+      name: newSession.name,
+      dob: newSession.dob
     });
     
   } catch (error) {
@@ -267,20 +274,32 @@ app.use('/admin', adminRoutes(db, gpt, upload));
  */
 app.post('/api/webhook', async (req, res) => {
   try {
-    const { uid, cardCount = 3 } = req.body;
+    const { uid, name, dob, cardCount = 3 } = req.body;
     
     if (!uid) {
       return res.json({
-        "messages": [
-          { "text": "Thiếu thông tin người dùng" }
-        ]
+        messages: [{
+          text: "Lỗi: Thiếu thông tin người dùng"
+        }]
       });
     }
     
+    // Kiểm tra định dạng ngày sinh nếu được cung cấp
+    if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+      return res.json({
+        messages: [{
+          text: "Lỗi: Ngày sinh phải có định dạng YYYY-MM-DD"
+        }]
+      });
+    }
+    
+    // Lấy cấu hình
+    const config = db.getConfig();
+    const defaultCount = config.defaultCardCount || 3;
+    const actualCardCount = Math.min(cardCount, defaultCount);
+    
     // Lấy tất cả ảnh lá bài từ thư mục
-    const imageDir = process.env.NODE_ENV === 'production'
-      ? path.join('/mnt/data', 'images')
-      : path.join(__dirname, 'public', 'images');
+    const imageDir = path.join(__dirname, 'public', 'images');
     let cardImages;
     try {
       cardImages = fs.readdirSync(imageDir).filter(file => 
@@ -291,11 +310,11 @@ app.post('/api/webhook', async (req, res) => {
       cardImages = [];
     }
     
-    if (cardImages.length < cardCount) {
-      return res.json({ 
-        "messages": [
-          { "text": `Không đủ ảnh lá bài tarot (cần ít nhất ${cardCount} lá)` }
-        ]
+    if (cardImages.length < actualCardCount) {
+      return res.json({
+        messages: [{
+          text: `Không đủ ảnh lá bài tarot (cần ít nhất ${actualCardCount} lá)`
+        }]
       });
     }
     
@@ -303,22 +322,22 @@ app.post('/api/webhook', async (req, res) => {
     const selectedCards = [];
     const selectedIndices = new Set();
     
-    while (selectedCards.length < cardCount) {
+    while (selectedCards.length < actualCardCount) {
       const randomIndex = Math.floor(Math.random() * cardImages.length);
       
       if (!selectedIndices.has(randomIndex)) {
         selectedIndices.add(randomIndex);
         const imageName = cardImages[randomIndex];
         
-        // Format tên lá bài hiển thị
-        const name = imageName
-          .replace(/\.(jpg|jpeg|png)$/i, '')
+        // Format tên lá bài hiển thị (chuyển the_fool.jpg -> The Fool)
+        const cardName = imageName
+          .replace(/.(jpg|jpeg|png)$/i, '')
           .split('_')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
         
         selectedCards.push({
-          name,
+          name: cardName,
           image: `/images/${imageName}`
         });
       }
@@ -327,6 +346,8 @@ app.post('/api/webhook', async (req, res) => {
     // Tạo session mới
     const newSession = db.addSession({
       uid,
+      name, // Thêm họ tên
+      dob,  // Thêm ngày sinh
       cards: selectedCards,
       paid: false,
       gptResult: null,

@@ -22,6 +22,8 @@ Dữ liệu lưu trữ trong file JSON (`/mnt/data/db.json`) với hai bảng ch
 1. **sessions**: Lưu thông tin phiên đọc bài
    - `id`: ID phiên duy nhất
    - `uid`: ID người dùng
+   - `name`: Họ tên đầy đủ của người dùng
+   - `dob`: Ngày sinh của người dùng (định dạng YYYY-MM-DD)
    - `timestamp`: Thời gian tạo phiên
    - `cards`: Các lá bài được rút (tên, hình ảnh)
    - `paid`: Trạng thái thanh toán
@@ -40,8 +42,8 @@ Dữ liệu lưu trữ trong file JSON (`/mnt/data/db.json`) với hai bảng ch
 #### API người dùng:
 
 - **POST /draw**: Rút lá bài Tarot ngẫu nhiên
-  - Request: `{ uid: "user_id", count: 3 }`
-  - Response: `{ id: "session_id", cards: [...], timestamp: "..." }`
+  - Request: `{ uid: "user_id", name: "Họ tên đầy đủ", dob: "YYYY-MM-DD", count: 3 }`
+  - Response: `{ id: "session_id", cards: [...], name: "Họ tên đầy đủ", dob: "YYYY-MM-DD", timestamp: "..." }`
 
 - **GET /result?uid=...**: Lấy kết quả đọc bài cho người dùng
   - Response: Thông tin phiên đọc bài (không bao gồm GPT result nếu chưa thanh toán)
