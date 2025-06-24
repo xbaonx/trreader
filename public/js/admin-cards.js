@@ -110,6 +110,12 @@ function bindCardEvents() {
       uploadResult.classList.remove('hidden');
       
       const formData = new FormData(this);
+      const fileInput = document.getElementById('cardImage');
+      
+      // Kiểm tra số lượng file được chọn
+      if (fileInput && fileInput.files && fileInput.files.length > 0) {
+        uploadResult.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Đang tải lên ${fileInput.files.length} file...`;
+      }
       
       axios.post('/admin/upload-card', formData, {
         headers: {
@@ -119,7 +125,20 @@ function bindCardEvents() {
         .then(response => {
           if (response.data && response.data.success) {
             uploadResult.className = 'alert alert-success mt-2';
-            uploadResult.innerHTML = `<i class="fas fa-check-circle"></i> Đã tải lên thành công thẻ bài "${response.data.cardName}"`;
+            
+            // Hiển thị thông báo với số lượng lá bài đã upload
+            uploadResult.innerHTML = `<i class="fas fa-check-circle"></i> ${response.data.message || 'Đã tải lên thành công'}`;
+            
+            // Hiển thị danh sách các file đã tải lên
+            if (response.data.cards && response.data.cards.length > 0) {
+              let fileList = '<ul class="mt-2 text-left">';
+              response.data.cards.forEach(card => {
+                fileList += `<li>${card.cardName}</li>`;
+              });
+              fileList += '</ul>';
+              
+              uploadResult.innerHTML += fileList;
+            }
             
             // Reset form
             uploadCardForm.reset();

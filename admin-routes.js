@@ -304,29 +304,39 @@ module.exports = function(db, gpt, upload) {
   });
 
   /**
-   * API Route 9: Upload card image
+   * API Route 9: Upload card images (hỗ trợ nhiều ảnh cùng lúc)
    * POST /admin/upload-card
    */
-  router.post('/upload-card', upload.single('cardImage'), (req, res) => {
+  router.post('/upload-card', upload.array('cardImage', 20), (req, res) => {
     try {
-      if (!req.file) {
+      if (!req.files || req.files.length === 0) {
         return res.status(400).json({
           success: false,
           error: 'Không có file ảnh nào được tải lên'
         });
       }
 
-      // Get card name from form or use filename
-      const cardName = req.body.cardName || 
-        path.parse(req.file.originalname).name
+      // Xử lý tất cả các file được upload
+      const uploadedCards = req.files.map(file => {
+        // Lấy tên lá bài từ tên file
+        const cardName = path.parse(file.originalname).name
           .split('_')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
+          
+        return {
+          originalName: file.originalname,
+          filename: file.filename,
+          cardName: cardName,
+          filePath: `/images/${file.filename}`,
+          size: file.size
+        };
+      });
       
       res.json({
         success: true,
-        cardName,
-        filePath: `/images/${req.file.filename}`
+        message: `Đã upload thành công ${uploadedCards.length} lá bài`,
+        cards: uploadedCards
       });
       
     } catch (error) {
