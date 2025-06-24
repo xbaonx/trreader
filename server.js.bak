@@ -11,7 +11,6 @@ const fs = require('fs-extra');
 const { createObjectCsvWriter } = require('csv-writer');
 const db = require('./db');
 const gpt = require('./gpt');
-const imageService = require('./image-service');
 const adminRoutes = require('./admin-routes');
 
 // Load environment variables
@@ -144,9 +143,9 @@ app.get('/', (req, res) => {
  * API Route 1: Rút bài ngẫu nhiên
  * POST /draw
  */
-app.post('/draw', async (req, res) => {
+app.post('/draw', (req, res) => {
   try {
-    const { uid, full_name, dob } = req.body;
+    const { uid, name, dob } = req.body;
     
     if (!uid) {
       return res.status(400).json({ error: 'User ID là bắt buộc' });
@@ -204,23 +203,10 @@ app.post('/draw', async (req, res) => {
       }
     }
     
-    // Tạo ảnh ghép từ các lá bài đã chọn
-    let compositeImageUrl = null;
-    try {
-      compositeImageUrl = await imageService.createCompositeImage(selectedCards);
-      console.log('Created composite image:', compositeImageUrl);
-    } catch (error) {
-      console.error('Error creating composite image:', error);
-      // Không báo lỗi cho client, tiếp tục xử lý
-    }
-    
     // Tạo session mới
     const newSession = db.addSession({
       uid,
-      full_name,
-      dob, 
       cards: selectedCards,
-      compositeImage: compositeImageUrl,
       paid: false,
       gptResult: null,
     });
@@ -230,9 +216,8 @@ app.post('/draw', async (req, res) => {
       success: true, 
       sessionId: newSession.id,
       cards: selectedCards,
-      full_name: newSession.full_name,
-      dob: newSession.dob,
-      compositeImage: compositeImageUrl
+      name: newSession.name,
+      dob: newSession.dob
     });
     
   } catch (error) {
@@ -289,32 +274,20 @@ app.use('/admin', adminRoutes(db, gpt, upload));
  */
 app.post('/api/webhook', async (req, res) => {
   try {
-    const { uid, full_name, dob, cardCount = 3 } = req.body;
+    const { uid, cardCount = 3 } = req.body;
     
     if (!uid) {
       return res.json({
-        messages: [{
-          text: "Lỗi: Thiếu thông tin người dùng"
-        }]
+        "messages": [
+          { "text": "Thiếu thông tin người dùng" }
+        ]
       });
     }
-    
-    // Kiểm tra định dạng ngày sinh nếu được cung cấp
-    if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
-      return res.json({
-        messages: [{
-          text: "Lỗi: Ngày sinh phải có định dạng YYYY-MM-DD"
-        }]
-      });
-    }
-    
-    // Lấy cấu hình
-    const config = db.getConfig();
-    const defaultCount = config.defaultCardCount || 3;
-    const actualCardCount = Math.min(cardCount, defaultCount);
     
     // Lấy tất cả ảnh lá bài từ thư mục
-    const imageDir = path.join(__dirname, 'public', 'images');
+    const imageDir = process.env.NODE_ENV === 'production'
+      ? path.join('/mnt/data', 'images')
+      : path.join(__dirname, 'public', 'images');
     let cardImages;
     try {
       cardImages = fs.readdirSync(imageDir).filter(file => 
@@ -325,11 +298,11 @@ app.post('/api/webhook', async (req, res) => {
       cardImages = [];
     }
     
-    if (cardImages.length < actualCardCount) {
-      return res.json({
-        messages: [{
-          text: `Không đủ ảnh lá bài tarot (cần ít nhất ${actualCardCount} lá)`
-        }]
+    if (cardImages.length < cardCount) {
+      return res.json({ 
+        "messages": [
+          { "text": `Không đủ ảnh lá bài tarot (cần ít nhất ${cardCount} lá)` }
+        ]
       });
     }
     
@@ -337,44 +310,31 @@ app.post('/api/webhook', async (req, res) => {
     const selectedCards = [];
     const selectedIndices = new Set();
     
-    while (selectedCards.length < actualCardCount) {
+    while (selectedCards.length < cardCount) {
       const randomIndex = Math.floor(Math.random() * cardImages.length);
       
       if (!selectedIndices.has(randomIndex)) {
         selectedIndices.add(randomIndex);
         const imageName = cardImages[randomIndex];
         
-        // Format tên lá bài hiển thị (chuyển the_fool.jpg -> The Fool)
-        const cardName = imageName
-          .replace(/.(jpg|jpeg|png)$/i, '')
+        // Format tên lá bài hiển thị
+        const name = imageName
+          .replace(/\.(jpg|jpeg|png)$/i, '')
           .split('_')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
         
         selectedCards.push({
-          name: cardName,
+          name,
           image: `/images/${imageName}`
         });
       }
     }
     
-    // Tạo ảnh ghép từ các lá bài đã chọn
-    let compositeImageUrl = null;
-    try {
-      compositeImageUrl = await imageService.createCompositeImage(selectedCards);
-      console.log('Created composite image for webhook:', compositeImageUrl);
-    } catch (error) {
-      console.error('Error creating composite image for webhook:', error);
-      // Không báo lỗi cho client, tiếp tục xử lý
-    }
-    
     // Tạo session mới
     const newSession = db.addSession({
       uid,
-      full_name, // Họ tên đầy đủ
-      dob,      // Ngày sinh
       cards: selectedCards,
-      compositeImage: compositeImageUrl, // Thêm đường dẫn ảnh ghép
       paid: false,
       gptResult: null,
     });
@@ -394,25 +354,10 @@ app.post('/api/webhook', async (req, res) => {
       }
     }));
     
-    // Thêm ảnh ghép nếu có
-    let compositeMessage = [];
-    if (compositeImageUrl) {
-      compositeMessage = [{
-        "attachment": {
-          "type": "image",
-          "payload": {
-            "url": `${baseUrl}${compositeImageUrl}`
-          }
-        }
-      }, 
-      { "text": "👆 Đây là ảnh ghép 3 lá bài của bạn" }];
-    }
-    
     res.json({
       "messages": [
         { "text": `Dưới đây là ${cardCount} lá bài của bạn:` },
         ...cardMessages,
-        ...compositeMessage,
         { 
           "attachment": {
             "type": "template",

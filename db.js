@@ -184,10 +184,11 @@ function addSession(sessionData) {
   const newSession = {
     id: uuidv4(),
     uid: sessionData.uid,
-    full_name: sessionData.full_name || 'Khách',  // Trường mới: họ tên
-    dob: sessionData.dob || '',         // Trường mới: ngày sinh
+    full_name: sessionData.full_name || 'Khách',  // Họ tên đầy đủ
+    dob: sessionData.dob || '',                   // Ngày sinh
     timestamp: new Date().toISOString(),
     cards: sessionData.cards,
+    compositeImage: sessionData.compositeImage || null, // Ảnh ghép các lá bài
     paid: sessionData.paid || false,
     gptResult: sessionData.gptResult || null,
   };
