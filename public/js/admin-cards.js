@@ -37,6 +37,10 @@ function renderCards() {
         <img src="${card.path}" alt="${card.displayName}" class="card-preview" 
           onclick="previewCard('${card.path}', '${card.displayName}')">
         <div class="card-name">${card.displayName}</div>
+        <button class="btn btn-sm btn-danger delete-card" 
+          onclick="deleteCard('${card.filename}', '${card.displayName}')">
+          <i class="fas fa-trash"></i>
+        </button>
       </div>
     `;
   });
@@ -54,6 +58,42 @@ function previewCard(imagePath, cardName) {
   
   const cardPreviewModal = new bootstrap.Modal(document.getElementById('cardPreviewModal'));
   cardPreviewModal.show();
+}
+
+// Delete card function
+function deleteCard(filename, displayName) {
+  if (confirm(`Bạn có chắc chắn muốn xóa lá bài "${displayName}"?`)) {
+    const deleteResult = document.getElementById('deleteResult');
+    if (deleteResult) {
+      deleteResult.className = 'alert alert-info mt-2';
+      deleteResult.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xóa lá bài...';
+      deleteResult.classList.remove('hidden');
+    }
+    
+    axios.post('/admin/delete-card', { filename })
+      .then(response => {
+        if (response.data && response.data.success) {
+          if (deleteResult) {
+            deleteResult.className = 'alert alert-success mt-2';
+            deleteResult.innerHTML = `<i class="fas fa-check-circle"></i> ${response.data.message || 'Đã xóa thành công'}`;
+          }
+          // Reload cards after successful deletion
+          loadCards();
+        } else {
+          if (deleteResult) {
+            deleteResult.className = 'alert alert-danger mt-2';
+            deleteResult.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${response.data.error || 'Lỗi không xác định'}`;
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting card:', error);
+        if (deleteResult) {
+          deleteResult.className = 'alert alert-danger mt-2';
+          deleteResult.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${error.response?.data?.error || 'Lỗi khi xóa lá bài'}`;
+        }
+      });
+  }
 }
 
 // Card event bindings

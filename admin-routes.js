@@ -304,63 +304,129 @@ module.exports = function(db, gpt, upload) {
   });
 
   /**
-   * Upload lá bài mới
+   * API Route 9: Upload card image
    * POST /admin/upload-card
    */
   router.post('/upload-card', upload.single('cardImage'), (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: 'Không có file được upload' });
+        return res.status(400).json({
+          success: false,
+          error: 'Không có file ảnh nào được tải lên'
+        });
       }
+
+      // Get card name from form or use filename
+      const cardName = req.body.cardName || 
+        path.parse(req.file.originalname).name
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
       
-      // Trả về thông tin file đã upload
       res.json({
         success: true,
-        cardName: req.file.filename,
-        path: `/images/${req.file.filename}`
+        cardName,
+        filePath: `/images/${req.file.filename}`
       });
       
     } catch (error) {
-      console.error('Error in /admin/upload-card endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      console.error('Error uploading card:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Lỗi khi tải lên file'
+      });
     }
   });
-  
+
   /**
-   * Lấy danh sách các lá bài đã upload
+   * API Route 10: Get cards list
    * GET /admin/cards
    */
   router.get('/cards', (req, res) => {
     try {
-      const imageDir = path.join(__dirname, 'public', 'images');
-      fs.ensureDirSync(imageDir);
-      
-      const cardFiles = fs.readdirSync(imageDir).filter(file => 
+      const imageDir = path.join(process.cwd(), 'public', 'images');
+      const files = fs.readdirSync(imageDir).filter(file => 
         file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png')
       );
       
-      const cards = cardFiles.map(filename => {
-        // Format tên hiển thị (chuyển the_fool.jpg -> The Fool)
-        const displayName = filename
+      const cards = files.map(file => {
+        // Format display name (convert snake_case to Title Case)
+        const displayName = file
           .replace(/\.(jpg|jpeg|png)$/i, '')
           .split('_')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
-          
+        
         return {
-          filename,
+          filename: file,
           displayName,
-          path: `/images/${filename}`
+          path: `/images/${file}`
         };
       });
       
-      res.json({ success: true, cards });
+      res.json({
+        success: true,
+        cards
+      });
       
     } catch (error) {
-      console.error('Error in /admin/cards endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      console.error('Error getting cards:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Lỗi khi lấy danh sách lá bài'
+      });
     }
   });
-  
+
+  /**
+   * API Route 11: Delete card image
+   * POST /admin/delete-card
+   */
+  router.post('/delete-card', (req, res) => {
+    try {
+      const { filename } = req.body;
+      
+      if (!filename) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tên file lá bài là bắt buộc'
+        });
+      }
+      
+      // Kiểm tra và ngăn chặn path traversal
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tên file không hợp lệ'
+        });
+      }
+      
+      const imagePath = path.join(process.cwd(), 'public', 'images', filename);
+      
+      // Kiểm tra file tồn tại
+      if (!fs.existsSync(imagePath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'File ảnh không tồn tại'
+        });
+      }
+      
+      // Xóa file
+      fs.unlinkSync(imagePath);
+      
+      res.json({
+        success: true,
+        message: `Đã xóa lá bài ${filename} thành công`
+      });
+      
+    } catch (error) {
+      console.error('Error deleting card:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Lỗi khi xóa lá bài'
+      });
+    }
+  });
+
   return router;
 };
