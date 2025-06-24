@@ -346,7 +346,7 @@ app.post('/api/webhook', async (req, res) => {
     // Tạo session mới
     const newSession = db.addSession({
       uid,
-      name, // Thêm họ tên
+      full_name, // Thêm họ tên đầy đủ
       dob,  // Thêm ngày sinh
       cards: selectedCards,
       paid: false,
