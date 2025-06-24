@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <style>
+    body {
+      padding-top: 20px;
+    }
+    .header-container {
+      padding: 10px;
+      margin-bottom: 20px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+    }
+    .tab-content {
+      padding: 20px;
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+      border-top: none;
+      border-radius: 0 0 5px 5px;
+    }
+    .table-responsive {
+      overflow-x: auto;
+    }
+    .hidden {
+      display: none;
+    }
+    .card-preview {
+      width: 100px;
+      height: 180px;
+      object-fit: cover;
+      margin: 5px;
+      cursor: pointer;
+    }
+    .config-textarea {
+      min-height: 200px;
+    }
+    .session-filter {
+      margin-bottom: 20px;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-container">
+      <h1 class="text-center">Quản Lý Tarot Card</h1>
+      <p class="text-center text-muted">Hệ thống quản lý phiên đọc bài Tarot và cấu hình</p>
+    </div>
+
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs" id="adminTabs">
+      <li class="nav-item">
+        <a class="nav-link <%= activeTab === 'sessions' ? 'active' : '' %>" data-bs-toggle="tab" href="#sessions">
+          <i class="fas fa-history"></i> Phiên Đọc Bài
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link <%= activeTab === 'config' ? 'active' : '' %>" data-bs-toggle="tab" href="#config">
+          <i class="fas fa-cogs"></i> Cấu Hình
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link <%= activeTab === 'cards' ? 'active' : '' %>" data-bs-toggle="tab" href="#cards">
+          <i class="fas fa-images"></i> Thẻ Bài
+        </a>
+      </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Sessions Tab -->
+      <div class="tab-pane fade <%= activeTab === 'sessions' ? 'show active' : '' %>" id="sessions">
+        <div class="row session-filter">
+          <div class="col-md-10">
+            <div class="input-group">
+              <input type="text" class="form-control" id="filterUid" placeholder="ID người dùng">
+              <input type="date" class="form-control" id="filterStartDate">
+              <input type="date" class="form-control" id="filterEndDate">
+              <button class="btn btn-primary" id="btnFilter"><i class="fas fa-filter"></i> Lọc</button>
+              <button class="btn btn-secondary" id="btnResetFilter"><i class="fas fa-sync"></i> Reset</button>
+            </div>
+          </div>
+          <div class="col-md-2 text-end">
+            <a href="/admin/export" class="btn btn-success">
+              <i class="fas fa-file-export"></i> Xuất CSV
+            </a>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-striped table-hover" id="sessionsTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>ID người dùng</th>
+                <th>Thời gian</th>
+                <th>Thanh toán</th>
+                <th>Các lá bài</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="sessionsList">
+              <!-- Sessions will be loaded here by JavaScript -->
+              <tr>
+                <td colspan="7" class="text-center">Đang tải dữ liệu...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Config Tab -->
+      <div class="tab-pane fade <%= activeTab === 'config' ? 'show active' : '' %>" id="config">
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h5>Cấu Hình Prompt</h5>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="promptText">Prompt Template:</label>
+                  <textarea class="form-control config-textarea" id="promptText" rows="10"></textarea>
+                </div>
+                <div class="alert alert-info mt-2">
+                  <small>Sử dụng {{cards}} để chèn thông tin lá bài vào prompt.</small>
+                </div>
+                <button class="btn btn-primary mt-2" id="btnSavePrompt">
+                  <i class="fas fa-save"></i> Lưu Prompt
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h5>Cấu Hình Template Kết Quả</h5>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="templateText">Response Template:</label>
+                  <textarea class="form-control config-textarea" id="templateText" rows="10"></textarea>
+                </div>
+                <div class="alert alert-info mt-2">
+                  <small>Sử dụng {{content}} để chèn nội dung GPT vào template.</small>
+                </div>
+                <button class="btn btn-primary mt-2" id="btnSaveTemplate">
+                  <i class="fas fa-save"></i> Lưu Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h5>Các Cấu Hình Khác</h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="defaultCardCount">Số lá bài mặc định:</label>
+                  <input type="number" class="form-control" id="defaultCardCount" min="1" max="10">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-check mt-4">
+                  <input type="checkbox" class="form-check-input" id="enableCardRandomization" checked>
+                  <label class="form-check-label" for="enableCardRandomization">Cho phép rút bài ngẫu nhiên</label>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary mt-3" id="btnSaveOtherConfig">
+              <i class="fas fa-save"></i> Lưu Cấu Hình
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cards Tab -->
+      <div class="tab-pane fade <%= activeTab === 'cards' ? 'show active' : '' %>" id="cards">
+        <div class="card mb-4">
+          <div class="card-header">
+            <h5>Tải Lên Thẻ Bài Mới</h5>
+          </div>
+          <div class="card-body">
+            <form id="uploadCardForm" enctype="multipart/form-data">
+              <div class="input-group">
+                <input type="file" class="form-control" id="cardImage" name="cardImage" accept="image/jpeg,image/png">
+                <button type="submit" class="btn btn-primary">
+                  <i class="fas fa-upload"></i> Tải Lên
+                </button>
+              </div>
+              <small class="text-muted">Chỉ chấp nhận file JPG, JPEG hoặc PNG. Tối đa 5MB.</small>
+              <div class="alert alert-info mt-2 hidden" id="uploadResult">
+                <!-- Upload result message will appear here -->
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h5>Thư Viện Thẻ Bài</h5>
+          </div>
+          <div class="card-body">
+            <div id="cardsGrid" class="card-grid">
+              <!-- Cards will be loaded here by JavaScript -->
+              <div class="text-center">Đang tải dữ liệu...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session View/Edit Modal -->
+  <div class="modal fade" id="sessionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Chi Tiết Phiên Đọc Bài</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="session-details mb-3">
+            <p><strong>ID Phiên:</strong> <span id="modalSessionId"></span></p>
+            <p><strong>ID Người Dùng:</strong> <span id="modalSessionUid"></span></p>
+            <p><strong>Thời Gian:</strong> <span id="modalSessionTime"></span></p>
+            <p><strong>Thanh Toán:</strong> <span id="modalSessionPaid"></span></p>
+          </div>
+          <div class="cards-container mb-3">
+            <h6>Các Lá Bài</h6>
+            <div id="modalSessionCards" class="d-flex flex-wrap">
+              <!-- Cards will be displayed here -->
+            </div>
+          </div>
+          <div id="resultContainer">
+            <h6>Kết Quả Đọc Bài</h6>
+            <div id="gptResultPanel">
+              <div class="form-group">
+                <textarea class="form-control" id="gptResultText" rows="10"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success" id="btnApprove">
+            <i class="fas fa-check"></i> Duyệt và Tạo Kết Quả
+          </button>
+          <button type="button" class="btn btn-primary" id="btnSave">
+            <i class="fas fa-save"></i> Lưu Thay Đổi
+          </button>
+          <button type="button" class="btn btn-danger" id="btnDelete">
+            <i class="fas fa-trash"></i> Xóa Session
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card Preview Modal -->
+  <div class="modal fade" id="cardPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="cardPreviewTitle">Xem Thẻ Bài</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-center">
+          <img src="" id="cardPreviewImage" class="img-fluid" alt="Card Preview">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/admin-config.js"></script>
+  <script src="/js/admin-cards.js"></script>
+</body>
+</html>
