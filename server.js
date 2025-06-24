@@ -18,7 +18,6 @@ dotenv.config();
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
@@ -106,7 +105,7 @@ app.get('/', (req, res) => {
     // Giao diện quản trị được render bằng EJS
     res.render('admin', {
       title: 'Quản lý Tarot - Admin Dashboard',
-      activeTab: req.query.tab || 'sessions' // Tab mặc định
+      activeTab: req.query.tab || 'sessions' 
     });
   } catch (error) {
     console.error('Error in root path endpoint:', error);
@@ -235,3 +234,9 @@ app.get('/result', (req, res) => {
  * Các route được định nghĩa trong admin-routes.js
  */
 app.use('/admin', adminRoutes(db, gpt, upload));
+
+// Khai báo port và chạy server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
