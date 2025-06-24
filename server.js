@@ -259,6 +259,209 @@ app.get('/result', (req, res) => {
  */
 app.use('/admin', adminRoutes(db, gpt, upload));
 
+// ========== CHATFUEL WEBHOOK API ==========
+
+/**
+ * API Webhook cho Chatfuel
+ * POST /api/webhook
+ */
+app.post('/api/webhook', async (req, res) => {
+  try {
+    const { uid, cardCount = 3 } = req.body;
+    
+    if (!uid) {
+      return res.json({
+        "messages": [
+          { "text": "Thiếu thông tin người dùng" }
+        ]
+      });
+    }
+    
+    // Lấy tất cả ảnh lá bài từ thư mục
+    const imageDir = process.env.NODE_ENV === 'production'
+      ? path.join('/mnt/data', 'images')
+      : path.join(__dirname, 'public', 'images');
+    let cardImages;
+    try {
+      cardImages = fs.readdirSync(imageDir).filter(file => 
+        file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png')
+      );
+    } catch (error) {
+      console.error('Error reading image directory:', error);
+      cardImages = [];
+    }
+    
+    if (cardImages.length < cardCount) {
+      return res.json({ 
+        "messages": [
+          { "text": `Không đủ ảnh lá bài tarot (cần ít nhất ${cardCount} lá)` }
+        ]
+      });
+    }
+    
+    // Chọn ngẫu nhiên các lá bài
+    const selectedCards = [];
+    const selectedIndices = new Set();
+    
+    while (selectedCards.length < cardCount) {
+      const randomIndex = Math.floor(Math.random() * cardImages.length);
+      
+      if (!selectedIndices.has(randomIndex)) {
+        selectedIndices.add(randomIndex);
+        const imageName = cardImages[randomIndex];
+        
+        // Format tên lá bài hiển thị
+        const name = imageName
+          .replace(/\.(jpg|jpeg|png)$/i, '')
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        
+        selectedCards.push({
+          name,
+          image: `/images/${imageName}`
+        });
+      }
+    }
+    
+    // Tạo session mới
+    const newSession = db.addSession({
+      uid,
+      cards: selectedCards,
+      paid: false,
+      gptResult: null,
+    });
+    
+    // Chuẩn bị URL cho Chatfuel
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? `https://${req.headers.host}` 
+      : `http://${req.headers.host}`;
+      
+    // Trả về thông tin theo định dạng Chatfuel
+    const cardMessages = selectedCards.map(card => ({
+      "attachment": {
+        "type": "image",
+        "payload": {
+          "url": `${baseUrl}${card.image}`
+        }
+      }
+    }));
+    
+    res.json({
+      "messages": [
+        { "text": `Dưới đây là ${cardCount} lá bài của bạn:` },
+        ...cardMessages,
+        { 
+          "attachment": {
+            "type": "template",
+            "payload": {
+              "template_type": "button",
+              "text": "Bạn có muốn xem kết quả đọc bài không?",
+              "buttons": [
+                {
+                  "type": "json_plugin_url",
+                  "url": `${baseUrl}/api/result?session=${newSession.id}`,
+                  "title": "Xem kết quả"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "session_id": newSession.id
+    });
+    
+  } catch (error) {
+    console.error('Error in /api/webhook endpoint:', error);
+    res.json({
+      "messages": [
+        { "text": "Đã xảy ra lỗi. Vui lòng thử lại sau." }
+      ]
+    });
+  }
+});
+
+/**
+ * API Trả về kết quả đọc bài Chatfuel
+ * GET /api/result
+ */
+app.get('/api/result', async (req, res) => {
+  try {
+    const { session } = req.query;
+    
+    if (!session) {
+      return res.json({
+        "messages": [
+          { "text": "Thiếu thông tin phiên đọc bài" }
+        ]
+      });
+    }
+    
+    const sessionData = db.getSessionById(session);
+    
+    if (!sessionData) {
+      return res.json({
+        "messages": [
+          { "text": "Không tìm thấy phiên đọc bài" }
+        ]
+      });
+    }
+    
+    // Kiểm tra xem phiên đã được thanh toán hay chưa
+    if (!sessionData.paid || !sessionData.gptResult) {
+      return res.json({
+        "messages": [
+          { "text": "Phiên đọc bài chưa được xử lý. Vui lòng quay lại sau." },
+          {
+            "attachment": {
+              "type": "template",
+              "payload": {
+                "template_type": "button",
+                "text": "Bạn có muốn kiểm tra lại kết quả?",
+                "buttons": [
+                  {
+                    "type": "json_plugin_url",
+                    "url": `${req.protocol}://${req.headers.host}/api/result?session=${session}`,
+                    "title": "Kiểm tra lại"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      });
+    }
+    
+    // Chuẩn bị URL cho Chatfuel
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? `https://${req.headers.host}` 
+      : `http://${req.headers.host}`;
+    
+    // Trả về kết quả theo định dạng Chatfuel
+    res.json({
+      "messages": [
+        { "text": sessionData.gptResult },
+        ...sessionData.cards.map(card => ({
+          "attachment": {
+            "type": "image",
+            "payload": {
+              "url": `${baseUrl}${card.image}`
+            }
+          }
+        }))
+      ]
+    });
+    
+  } catch (error) {
+    console.error('Error in /api/result endpoint:', error);
+    res.json({
+      "messages": [
+        { "text": "Đã xảy ra lỗi khi lấy kết quả đọc bài. Vui lòng thử lại sau." }
+      ]
+    });
+  }
+});
+
 // Khai báo port và chạy server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
