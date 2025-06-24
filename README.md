@@ -5,7 +5,6 @@ Hệ thống backend Node.js + Express cho ứng dụng đọc bài Tarot tích 
 ## Tính năng
 
 - **Rút bài ngẫu nhiên**: API rút bài Tarot ngẫu nhiên từ thư viện hình ảnh.
-- **Ảnh ghép lá bài**: Tự động tạo ảnh ghép từ 3 lá bài được rút để hiển thị cho người dùng.
 - **Lưu trữ phiên đọc bài**: Lưu toàn bộ thông tin phiên đọc bài trong file JSON.
 - **Tích hợp GPT**: Tạo lời giải đọc bài Tarot chi tiết dựa trên lá bài được rút.
 - **Chế độ thanh toán**: Chỉ hiển thị kết quả GPT sau khi được duyệt/thanh toán.
@@ -27,7 +26,6 @@ Dữ liệu lưu trữ trong file JSON (`/mnt/data/db.json`) với hai bảng ch
    - `dob`: Ngày sinh của người dùng (định dạng YYYY-MM-DD)
    - `timestamp`: Thời gian tạo phiên
    - `cards`: Các lá bài được rút (tên, hình ảnh)
-   - `compositeImage`: Đường dẫn đến ảnh ghép của 3 lá bài được rút
    - `paid`: Trạng thái thanh toán
    - `gptResult`: Kết quả đọc bài từ GPT
    - `approvedAt`: Thời gian duyệt (nếu đã duyệt)
@@ -45,7 +43,7 @@ Dữ liệu lưu trữ trong file JSON (`/mnt/data/db.json`) với hai bảng ch
 
 - **POST /draw**: Rút lá bài Tarot ngẫu nhiên
   - Request: `{ uid: "user_id", full_name: "Họ tên đầy đủ", dob: "YYYY-MM-DD", count: 3 }`
-  - Response: `{ id: "session_id", cards: [...], full_name: "Họ tên đầy đủ", dob: "YYYY-MM-DD", compositeImage: "/images/composites/composite_xxx.jpg", timestamp: "..." }`
+  - Response: `{ id: "session_id", cards: [...], full_name: "Họ tên đầy đủ", dob: "YYYY-MM-DD", timestamp: "..." }`
 
 - **GET /result?uid=...**: Lấy kết quả đọc bài cho người dùng
   - Response: Thông tin phiên đọc bài (không bao gồm GPT result nếu chưa thanh toán)

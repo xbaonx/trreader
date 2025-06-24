@@ -138,6 +138,57 @@ app.get('/', (req, res) => {
   }
 });
 
+// ========== DEBUG ROUTES ==========
+
+/**
+ * Route kiểm tra tính năng tạo ảnh ghép
+ * GET /debug/composite
+ */
+app.get('/debug/composite', async (req, res) => {
+  try {
+    const result = await debugComposite.testCompositeCreation();
+    
+    if (result.success) {
+      // Thêm thông tin về server
+      const serverInfo = {
+        nodeEnv: process.env.NODE_ENV || 'development',
+        hostname: req.headers.host,
+        publicUrl: process.env.NODE_ENV === 'production' 
+          ? `https://${req.headers.host}` 
+          : `http://${req.headers.host}`,
+        imagePath: result.compositePath,
+        fullUrl: process.env.NODE_ENV === 'production' 
+          ? `https://${req.headers.host}${result.compositePath}` 
+          : `http://${req.headers.host}${result.compositePath}`,
+        serverTime: new Date().toISOString()
+      };
+      
+      // Trả về kết quả test và thông tin server
+      res.json({
+        success: true,
+        message: 'Composite image created successfully',
+        debug: result,
+        server: serverInfo,
+        image: `<img src="${result.compositePath}" style="max-width: 100%">`,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Error creating composite image',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Debug composite error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error in debug endpoint', 
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // ========== API ROUTES ==========
 
 /**
@@ -394,25 +445,10 @@ app.post('/api/webhook', async (req, res) => {
       }
     }));
     
-    // Thêm ảnh ghép nếu có
-    let compositeMessage = [];
-    if (compositeImageUrl) {
-      compositeMessage = [{
-        "attachment": {
-          "type": "image",
-          "payload": {
-            "url": `${baseUrl}${compositeImageUrl}`
-          }
-        }
-      }, 
-      { "text": "👆 Đây là ảnh ghép 3 lá bài của bạn" }];
-    }
-    
     res.json({
       "messages": [
         { "text": `Dưới đây là ${cardCount} lá bài của bạn:` },
         ...cardMessages,
-        ...compositeMessage,
         { 
           "attachment": {
             "type": "template",
