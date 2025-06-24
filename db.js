@@ -184,7 +184,7 @@ function addSession(sessionData) {
   const newSession = {
     id: uuidv4(),
     uid: sessionData.uid,
-    name: sessionData.name || 'Khách',  // Trường mới: họ tên
+    full_name: sessionData.full_name || 'Khách',  // Trường mới: họ tên
     dob: sessionData.dob || '',         // Trường mới: ngày sinh
     timestamp: new Date().toISOString(),
     cards: sessionData.cards,

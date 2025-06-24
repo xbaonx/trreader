@@ -145,7 +145,7 @@ app.get('/', (req, res) => {
  */
 app.post('/draw', (req, res) => {
   try {
-    const { uid, name, dob } = req.body;
+    const { uid, full_name, dob } = req.body;
     
     if (!uid) {
       return res.status(400).json({ error: 'User ID là bắt buộc' });
@@ -216,7 +216,7 @@ app.post('/draw', (req, res) => {
       success: true, 
       sessionId: newSession.id,
       cards: selectedCards,
-      name: newSession.name,
+      full_name: newSession.full_name,
       dob: newSession.dob
     });
     
@@ -274,7 +274,7 @@ app.use('/admin', adminRoutes(db, gpt, upload));
  */
 app.post('/api/webhook', async (req, res) => {
   try {
-    const { uid, name, dob, cardCount = 3 } = req.body;
+    const { uid, full_name, dob, cardCount = 3 } = req.body;
     
     if (!uid) {
       return res.json({
