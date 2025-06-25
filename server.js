@@ -33,8 +33,7 @@ try {
   };
 }
 
-// Load environment variables
-dotenv.config();
+// Môi trường đã được cấu hình bởi dotenv ở trên
 
 // Create Express app
 const app = express();
