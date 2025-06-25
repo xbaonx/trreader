@@ -113,6 +113,26 @@ function bindConfigEvents() {
     });
   }
   
+  // Save model
+  const btnSaveModel = document.getElementById('btnSaveModel');
+  if (btnSaveModel) {
+    btnSaveModel.addEventListener('click', () => {
+      const gptModel = document.getElementById('gptModel').value;
+      
+      axios.post('/admin/config', { model: gptModel })
+        .then(response => {
+          if (response.data && response.data.success) {
+            state.config.model = gptModel;
+            showToast('Đã lưu model GPT thành công!', 'success');
+          }
+        })
+        .catch(error => {
+          console.error('Error saving model config:', error);
+          showToast('Lỗi khi lưu model GPT', 'danger');
+        });
+    });
+  }
+  
   // Save other config
   const btnSaveOtherConfig = document.getElementById('btnSaveOtherConfig');
   if (btnSaveOtherConfig) {
