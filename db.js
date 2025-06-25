@@ -285,8 +285,15 @@ function filterSessions(filters = {}) {
  * @returns {Object} Cấu hình hiện tại
  */
 function getConfig() {
+  console.log('[DEBUG] getConfig called');
   const db = readDB();
-  return db.config || DEFAULT_DB.config;
+  if (db.config) {
+    console.log('[DEBUG] Using config from DB:', JSON.stringify(db.config));
+    return db.config;
+  } else {
+    console.log('[DEBUG] Using DEFAULT_DB config');
+    return DEFAULT_DB.config;
+  }
 }
 
 /**

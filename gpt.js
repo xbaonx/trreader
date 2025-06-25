@@ -23,7 +23,7 @@ try {
  * @param {Array<Object>} cards - Mảng các đối tượng lá bài (có thuộc tính name)
  * @returns {Promise<string>} - Kết quả đọc bài từ GPT
  */
-async function generateTarotReading(cards) {
+async function generateTarotReading(cards, userInfo = {}) {
   try {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY không được thiết lập trong biến môi trường');
@@ -36,22 +36,43 @@ async function generateTarotReading(cards) {
     // Lấy cấu hình từ db
     const config = db.getConfig();
     
+    // Xử lý thông tin người dùng
+    const name = userInfo.name || 'Khách hàng';
+    const dob = userInfo.dob || 'không xác định';
+    
+    // Thay thế các placeholder trong template
+    let prompt = config.prompt
+      .replace(/\{\{name\}\}/g, name)
+      .replace(/\{\{dob\}\}/g, dob);
+      
+    let responseTemplate = config.responseTemplate
+      .replace(/\{\{name\}\}/g, name)
+      .replace(/\{\{dob\}\}/g, dob);
+    
     // Tạo prompt sử dụng config và template đã định nghĩa
     const cardsList = cards.map((card, index) => `${index + 1}. ${card.name}`).join('\n');
-    const fullPrompt = `${config.prompt}
+    const fullPrompt = `${prompt}
 
 Các lá bài được rút:
 ${cardsList}
 
 Vui lòng trả lời theo định dạng sau:
-${config.responseTemplate}`;
+${responseTemplate}`;
 
+    // Sử dụng mô hình từ config hoặc fallback về gpt-3.5-turbo nếu không tồn tại
+    const model = config.model || 'gpt-3.5-turbo';
+    
+    console.log(`Using GPT model: ${model}`);
+    
     // Gọi API OpenAI
+    console.log('[DEBUG] System message (from config.prompt):', prompt);
+    console.log('[DEBUG] User message (cards + template):', `Các lá bài được rút:\n${cardsList}\n\nVui lòng trả lời theo định dạng sau:\n${responseTemplate}`);
+    
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: model,
       messages: [
-        { role: "system", content: "Bạn là chuyên gia tarot với hơn 20 năm kinh nghiệm. Bạn giải đọc bài tarot một cách chi tiết, rõ ràng và dễ hiểu." },
-        { role: "user", content: fullPrompt }
+        { role: "system", content: prompt },
+        { role: "user", content: `Các lá bài được rút:\n${cardsList}\n\nVui lòng trả lời theo định dạng sau:\n${responseTemplate}` }
       ],
       temperature: 0.7,
     });
