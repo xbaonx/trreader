@@ -453,20 +453,10 @@ app.post('/api/webhook', async (req, res) => {
       : `http://${req.headers.host}`;
       
     // Trả về thông tin theo định dạng Chatfuel
-    const cardMessages = selectedCards.map(card => ({
-      "attachment": {
-        "type": "image",
-        "payload": {
-          "url": `${baseUrl}${card.image}`
-        }
-      }
-    }));
+    // Không gửi từng ảnh lá bài riêng nữa
     
-    // Tạo mảng messages cho response JSON
-    const messages = [
-      { "text": `Dưới đây là ${cardCount} lá bài của bạn:` },
-      ...cardMessages
-    ];
+    // Khởi tạo mảng messages trống
+    const messages = [];
     
     // Thêm ảnh ghép vào response nếu có
     if (compositeImageUrl) {
@@ -481,23 +471,7 @@ app.post('/api/webhook', async (req, res) => {
       });
     }
     
-    // Thêm nút xem kết quả
-    messages.push({ 
-      "attachment": {
-        "type": "template",
-        "payload": {
-          "template_type": "button",
-          "text": "Bạn có muốn xem kết quả đọc bài không?",
-          "buttons": [
-            {
-              "type": "json_plugin_url",
-              "url": `${baseUrl}/api/result?session=${newSession.id}`,
-              "title": "Xem kết quả"
-            }
-          ]
-        }
-      }
-    });
+    // Không thêm nút xem kết quả nữa
     
     res.json({
       "messages": messages,
