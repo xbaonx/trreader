@@ -34,14 +34,25 @@ function loadConfig() {
             const option = document.createElement('option');
             option.value = model;
             option.textContent = model;
-            option.selected = model === config.model;
+            if (model === config.model) {
+              option.selected = true;
+              option.setAttribute('selected', 'selected'); // Thêm bảo đảm chọn đúng
+            }
             modelSelect.appendChild(option);
           });
           
           // Nếu không có model được chọn, chọn mặc định gpt-3.5-turbo
-          if (modelSelect.querySelector('option[selected]') === null) {
-            const defaultOption = modelSelect.querySelector('option[value="gpt-3.5-turbo"]');
-            if (defaultOption) defaultOption.selected = true;
+          if (modelSelect.querySelector('option[selected="selected"]') === null) {
+            // Thử tìm model mặc định
+            let defaultOption = modelSelect.querySelector('option[value="gpt-3.5-turbo"]');
+            if (defaultOption) {
+              defaultOption.selected = true;
+              defaultOption.setAttribute('selected', 'selected');
+            } else if (modelSelect.options.length > 0) {
+              // Nếu không có gpt-3.5-turbo, chọn option đầu tiên
+              modelSelect.options[0].selected = true;
+              modelSelect.options[0].setAttribute('selected', 'selected');
+            }
           }
         }
         
@@ -124,6 +135,20 @@ function bindConfigEvents() {
           if (response.data && response.data.success) {
             state.config.model = gptModel;
             showToast('Đã lưu model GPT thành công!', 'success');
+            
+            // Làm mới dropdown để hiển thị giá trị được chọn
+            const modelSelect = document.getElementById('gptModel');
+            if (modelSelect) {
+              // Đặt lại giá trị selected cho tất cả option
+              Array.from(modelSelect.options).forEach(option => {
+                option.selected = (option.value === gptModel);
+                if (option.selected) {
+                  option.setAttribute('selected', 'selected');
+                } else {
+                  option.removeAttribute('selected');
+                }
+              });
+            }
           }
         })
         .catch(error => {
