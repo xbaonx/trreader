@@ -40,7 +40,9 @@ const DEFAULT_DB = {
 
 ## Kết luận
 [Đưa ra kết luận về tổng thể phiên đọc bài]`,
-    defaultCardCount: 3
+    defaultCardCount: 3,
+    model: 'gpt-3.5-turbo',
+    models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']
   }
 };
 
