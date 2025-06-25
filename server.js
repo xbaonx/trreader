@@ -603,7 +603,7 @@ app.post('/api/webhook', async (req, res) => {
     
     // Thêm ảnh ghép vào response nếu có
     if (compositeImageUrl) {
-      messages.push({ "text": "👆 Đây là ảnh ghép 3 lá bài của bạn" });
+      messages.push({ "text": "👆 Here are your three tarot cards" });
       messages.push({
         "attachment": {
           "type": "image",
@@ -695,6 +695,7 @@ app.post('/api/webhook/result', async (req, res) => {
       
       // Thêm ảnh ghép vào response nếu có
       if (sessionData.compositeImageUrl) {
+        messages.push({ "text": "👆 Here are your three tarot cards" });
         messages.push({
           "attachment": {
             "type": "image",
