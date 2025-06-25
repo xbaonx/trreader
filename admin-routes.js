@@ -78,7 +78,7 @@ module.exports = function(db, gpt, upload) {
       
       // Gọi GPT để tạo kết quả đọc bài
       try {
-        const gptResult = await gpt.generateTarotReading(session.cards);
+        const gptResult = await gpt.generateTarotReading(session.cards, session.name, session.dob);
         
         // Cập nhật session
         const updatedSession = db.updateSession(sessionId, {
@@ -143,12 +143,14 @@ module.exports = function(db, gpt, upload) {
         return res.status(400).json({ error: 'Session ID là bắt buộc' });
       }
       
-      // Xóa session
-      const success = db.deleteSession(sessionId);
+      // Tìm và xóa session
+      const session = db.getSessionById(sessionId);
       
-      if (!success) {
-        return res.status(404).json({ error: 'Không tìm thấy session hoặc không thể xóa' });
+      if (!session) {
+        return res.status(404).json({ error: 'Không tìm thấy session' });
       }
+      
+      db.deleteSession(sessionId);
       
       res.json({ success: true });
       
@@ -159,12 +161,13 @@ module.exports = function(db, gpt, upload) {
   });
 
   /**
-   * Lọc sessions theo UID hoặc thời gian
+   * Lọc sessions
    * POST /admin/filter
    */
   router.post('/filter', (req, res) => {
     try {
       const { uid, startDate, endDate } = req.body;
+      
       const sessions = db.filterSessions({ uid, startDate, endDate });
       res.json({ success: true, sessions });
     } catch (error) {
@@ -182,57 +185,128 @@ module.exports = function(db, gpt, upload) {
       const sessions = db.getAllSessions();
       
       if (sessions.length === 0) {
-        return res.status(404).json({ error: 'Không có dữ liệu để xuất' });
+        return res.status(404).send('Không có dữ liệu để xuất');
       }
       
-      // Tạo file CSV tạm thời
-      const timestamp = new Date().toISOString().replace(/:/g, '-');
-      const csvFilePath = path.join(__dirname, `temp_export_${timestamp}.csv`);
+      // Tạo đường dẫn tạm thời cho file CSV
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const csvPath = path.join(__dirname, `sessions-${timestamp}.csv`);
       
+      // Định nghĩa header cho file CSV
       const csvWriter = createObjectCsvWriter({
-        path: csvFilePath,
+        path: csvPath,
         header: [
           { id: 'id', title: 'ID' },
-          { id: 'uid', title: 'UID' },
+          { id: 'uid', title: 'User ID' },
+          { id: 'name', title: 'Họ tên' },
+          { id: 'dob', title: 'Ngày sinh' },
           { id: 'timestamp', title: 'Thời gian' },
-          { id: 'paid', title: 'Đã thanh toán' },
+          { id: 'paid', title: 'Thanh toán' },
           { id: 'cards', title: 'Các lá bài' },
-          { id: 'hasResult', title: 'Có kết quả' }
+          { id: 'gptResult', title: 'Kết quả đọc bài' }
         ]
       });
       
-      // Chuẩn bị dữ liệu cho CSV
-      const csvData = sessions.map(session => ({
+      // Chuẩn bị dữ liệu để xuất
+      const records = sessions.map(session => ({
         id: session.id,
         uid: session.uid,
+        name: session.name || '',
+        dob: session.dob || '',
         timestamp: session.timestamp,
-        paid: session.paid ? 'Có' : 'Không',
-        cards: session.cards.map(card => card.name).join(', '),
-        hasResult: session.gptResult ? 'Có' : 'Không'
+        paid: session.paid ? 'Đã thanh toán' : 'Chưa thanh toán',
+        cards: session.cards ? session.cards.join(', ') : '',
+        gptResult: session.gptResult || ''
       }));
       
-      // Ghi file CSV
-      csvWriter.writeRecords(csvData)
+      // Ghi dữ liệu vào file CSV
+      csvWriter.writeRecords(records)
         .then(() => {
-          // Gửi file và xóa sau khi hoàn tất
-          res.download(csvFilePath, `tarot_sessions_${timestamp}.csv`, (err) => {
-            fs.removeSync(csvFilePath); // Xóa file tạm sau khi gửi
-            if (err) console.error('Error sending CSV file:', err);
+          // Đọc file CSV và gửi về client
+          res.setHeader('Content-Type', 'text/csv');
+          res.setHeader('Content-Disposition', `attachment; filename=sessions-${timestamp}.csv`);
+          
+          const fileStream = fs.createReadStream(csvPath);
+          fileStream.pipe(res);
+          
+          // Xóa file sau khi đã gửi xong
+          fileStream.on('end', () => {
+            fs.unlink(csvPath, (err) => {
+              if (err) console.error('Error deleting CSV file:', err);
+            });
           });
-        })
-        .catch(error => {
-          console.error('Error writing CSV:', error);
-          res.status(500).json({ error: 'Lỗi khi tạo file CSV' });
         });
-      
     } catch (error) {
-      console.error('Error in /admin/export endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      console.error('Error exporting sessions:', error);
+      res.status(500).send('Lỗi khi xuất dữ liệu');
     }
   });
 
   /**
-   * Lấy prompt hiện tại
+   * Lấy toàn bộ cấu hình
+   * GET /admin/config 
+   */
+  router.get('/config', (req, res) => {
+    try {
+      const config = db.getConfig();
+      res.json({ success: true, config });
+    } catch (error) {
+      console.error('Error getting config:', error);
+      res.status(500).json({ error: 'Lỗi khi lấy cấu hình' });
+    }
+  });
+
+  /**
+   * Lấy toàn bộ cấu hình
+   * GET /admin/config
+   */
+  router.get('/config', (req, res) => {
+    try {
+      const config = db.getConfig();
+      res.json({ success: true, config });
+    } catch (error) {
+      console.error('Error getting config:', error);
+      res.status(500).json({ error: 'Lỗi khi lấy cấu hình' });
+    }
+  });
+
+  /**
+   * Cập nhật toàn bộ cấu hình
+   * POST /admin/config
+   */
+  router.post('/config', (req, res) => {
+    try {
+      // Lấy các tham số từ body
+      const { 
+        prompt, 
+        responseTemplate, 
+        defaultCardCount, 
+        model,
+        defaultUserInfo
+      } = req.body;
+      
+      // Tạo đối tượng cấu hình để cập nhật
+      const configUpdate = {};
+      
+      // Thêm các tham số nếu có
+      if (prompt !== undefined) configUpdate.prompt = prompt;
+      if (responseTemplate !== undefined) configUpdate.responseTemplate = responseTemplate;
+      if (defaultCardCount !== undefined) configUpdate.defaultCardCount = parseInt(defaultCardCount, 10) || 3;
+      if (model !== undefined) configUpdate.model = model;
+      if (defaultUserInfo !== undefined) configUpdate.defaultUserInfo = defaultUserInfo;
+      
+      // Cập nhật cấu hình
+      db.updateConfig(configUpdate);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating config:', error);
+      res.status(500).json({ error: 'Lỗi khi cập nhật cấu hình' });
+    }
+  });
+
+  /**
+   * Cấu hình prompt
    * GET /admin/prompt
    */
   router.get('/prompt', (req, res) => {
@@ -241,34 +315,32 @@ module.exports = function(db, gpt, upload) {
       res.json({ success: true, prompt: config.prompt });
     } catch (error) {
       console.error('Error in GET /admin/prompt endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      res.status(500).json({ error: 'Lỗi khi lấy cấu hình prompt' });
     }
   });
 
   /**
-   * Cập nhật prompt
+   * Lưu cấu hình prompt
    * POST /admin/prompt
    */
   router.post('/prompt', (req, res) => {
     try {
       const { prompt } = req.body;
       
-      if (!prompt) {
+      if (prompt === undefined) {
         return res.status(400).json({ error: 'Nội dung prompt là bắt buộc' });
       }
       
-      // Cập nhật cấu hình
-      const config = db.updateConfig({ prompt });
-      res.json({ success: true, config });
-      
+      db.updateConfig({ prompt });
+      res.json({ success: true });
     } catch (error) {
       console.error('Error in POST /admin/prompt endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      res.status(500).json({ error: 'Lỗi khi cập nhật prompt' });
     }
   });
 
   /**
-   * Lấy template hiện tại
+   * Cấu hình template
    * GET /admin/template
    */
   router.get('/template', (req, res) => {
@@ -277,29 +349,27 @@ module.exports = function(db, gpt, upload) {
       res.json({ success: true, template: config.responseTemplate });
     } catch (error) {
       console.error('Error in GET /admin/template endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      res.status(500).json({ error: 'Lỗi khi lấy cấu hình template' });
     }
   });
 
   /**
-   * Cập nhật template
+   * Lưu cấu hình template
    * POST /admin/template
    */
   router.post('/template', (req, res) => {
     try {
       const { template } = req.body;
       
-      if (!template) {
+      if (template === undefined) {
         return res.status(400).json({ error: 'Nội dung template là bắt buộc' });
       }
       
-      // Cập nhật cấu hình
-      const config = db.updateConfig({ responseTemplate: template });
-      res.json({ success: true, config });
-      
+      db.updateConfig({ responseTemplate: template });
+      res.json({ success: true });
     } catch (error) {
       console.error('Error in POST /admin/template endpoint:', error);
-      res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+      res.status(500).json({ error: 'Lỗi khi cập nhật template' });
     }
   });
 
