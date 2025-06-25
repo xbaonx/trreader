@@ -488,15 +488,16 @@ app.post('/api/webhook', async (req, res) => {
   }
 });
 
+
 /**
- * API Trả về kết quả đọc bài Chatfuel
- * GET /api/result
+ * Webhook API Trả kết quả đọc bài
+ * POST /api/webhook/result
  */
-app.get('/api/result', async (req, res) => {
+app.post('/api/webhook/result', async (req, res) => {
   try {
-    const { session } = req.query;
+    const { session_id } = req.body;
     
-    if (!session) {
+    if (!session_id) {
       return res.json({
         "messages": [
           { "text": "Thiếu thông tin phiên đọc bài" }
@@ -504,7 +505,7 @@ app.get('/api/result', async (req, res) => {
       });
     }
     
-    const sessionData = db.getSessionById(session);
+    const sessionData = db.getSessionById(session_id);
     
     if (!sessionData) {
       return res.json({
@@ -514,27 +515,11 @@ app.get('/api/result', async (req, res) => {
       });
     }
     
-    // Kiểm tra xem phiên đã được thanh toán hay chưa
+    // Kiểm tra xem phiên đã được thanh toán và có kết quả đọc bài hay chưa
     if (!sessionData.paid || !sessionData.gptResult) {
       return res.json({
         "messages": [
-          { "text": "Phiên đọc bài chưa được xử lý. Vui lòng quay lại sau." },
-          {
-            "attachment": {
-              "type": "template",
-              "payload": {
-                "template_type": "button",
-                "text": "Bạn có muốn kiểm tra lại kết quả?",
-                "buttons": [
-                  {
-                    "type": "json_plugin_url",
-                    "url": `${req.protocol}://${req.headers.host}/api/result?session=${session}`,
-                    "title": "Kiểm tra lại"
-                  }
-                ]
-              }
-            }
-          }
+          { "text": "Phiên đọc bài chưa được xử lý hoặc thanh toán. Vui lòng quay lại sau." }
         ]
       });
     }
@@ -544,23 +529,31 @@ app.get('/api/result', async (req, res) => {
       ? `https://${req.headers.host}` 
       : `http://${req.headers.host}`;
     
+    // Tạo mảng response
+    const messages = [];
+    
+    // Thêm kết quả GPT
+    messages.push({ "text": sessionData.gptResult });
+    
+    // Thêm ảnh ghép vào response nếu có
+    if (sessionData.compositeImageUrl) {
+      messages.push({
+        "attachment": {
+          "type": "image",
+          "payload": {
+            "url": `${baseUrl}${sessionData.compositeImageUrl}`
+          }
+        }
+      });
+    }
+    
     // Trả về kết quả theo định dạng Chatfuel
     res.json({
-      "messages": [
-        { "text": sessionData.gptResult },
-        ...sessionData.cards.map(card => ({
-          "attachment": {
-            "type": "image",
-            "payload": {
-              "url": `${baseUrl}${card.image}`
-            }
-          }
-        }))
-      ]
+      "messages": messages
     });
     
   } catch (error) {
-    console.error('Error in /api/result endpoint:', error);
+    console.error('Error in /api/webhook/result endpoint:', error);
     res.json({
       "messages": [
         { "text": "Đã xảy ra lỗi khi lấy kết quả đọc bài. Vui lòng thử lại sau." }
