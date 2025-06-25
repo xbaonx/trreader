@@ -3,11 +3,13 @@
  */
 
 const express = require('express');
+const bodyParser = require('body-parser');
 const path = require('path');
-const morgan = require('morgan');
-const dotenv = require('dotenv');
-const multer = require('multer');
 const fs = require('fs-extra');
+const PDFDocument = require('pdfkit');
+require('dotenv').config();
+const morgan = require('morgan');
+const multer = require('multer');
 const { createObjectCsvWriter } = require('csv-writer');
 const db = require('./db');
 const gpt = require('./gpt');
@@ -42,6 +44,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/admin', express.static('public'));
+app.use('/pdfs', express.static(pdfDir)); // Serve PDF files
 
 // Set up EJS as the view engine
 app.set('view engine', 'ejs');
@@ -130,13 +134,152 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
+// Thư mục lưu PDF trên Render disk
+const pdfDir = process.env.NODE_ENV === 'production'
+  ? path.join('/mnt/data', 'pdfs')
+  : path.join(__dirname, 'pdfs');
+
+// Đảm bảo thư mục PDF tồn tại
+if (!fs.existsSync(pdfDir)) {
+  fs.mkdirSync(pdfDir, { recursive: true });
+}
+
 // Thêm middleware để kiểm tra thư mục static
 app.use((req, res, next) => {
+  // Đảm bảo các thư mục cần thiết tồn tại
+  if (!fs.existsSync('public/debug-composite')) {
+    fs.mkdirSync('public/debug-composite', { recursive: true });
+  }
+
   // Đảm bảo thư mục static tồn tại
   fs.ensureDirSync(path.join(__dirname, 'public'));
   fs.ensureDirSync(path.join(__dirname, 'public', 'images'));
   next();
 });
+
+/**
+ * Tạo PDF cho kết quả đọc bài
+ * @param {Object} sessionData - Dữ liệu phiên đọc bài
+ * @returns {Promise<string>} - Đường dẫn tới file PDF
+ */
+async function generateTarotPDF(sessionData) {
+  return new Promise((resolve, reject) => {
+    try {
+      const sessionId = sessionData.id;
+      const pdfPath = path.join(pdfDir, `${sessionId}.pdf`);
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const stream = fs.createWriteStream(pdfPath);
+      
+      // Xử lý sự kiện khi đã ghi xong PDF
+      stream.on('finish', () => {
+        resolve(pdfPath);
+      });
+      
+      // Pipe PDF vào stream
+      doc.pipe(stream);
+      
+      // Thiết lập font
+      doc.font('Helvetica');
+      
+      // Trang bìa
+      doc.fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', {
+        align: 'center'
+      });
+      
+      doc.moveDown(2);
+      
+      // Thông tin người dùng
+      if (sessionData.userInfo) {
+        doc.fontSize(14);
+        if (sessionData.userInfo.name) {
+          doc.text(`Họ và tên: ${sessionData.userInfo.name}`);
+        }
+        if (sessionData.userInfo.dob) {
+          doc.text(`Ngày sinh: ${sessionData.userInfo.dob}`);
+        }
+        doc.moveDown();
+      }
+      
+      // Câu hỏi
+      if (sessionData.question) {
+        doc.fontSize(16).text('Câu hỏi:', { underline: true });
+        doc.fontSize(14).text(sessionData.question);
+        doc.moveDown();
+      }
+      
+      // Ảnh ghép lá bài
+      if (sessionData.compositeImageUrl) {
+        const imagePath = path.join(__dirname, 'public', sessionData.compositeImageUrl);
+        if (fs.existsSync(imagePath)) {
+          doc.image(imagePath, {
+            fit: [500, 300],
+            align: 'center'
+          });
+          doc.moveDown();
+        }
+      }
+      
+      // Kết quả đọc bài
+      if (sessionData.gptResult) {
+        doc.fontSize(16).text('Kết quả đọc bài:', { underline: true });
+        doc.fontSize(12).text(sessionData.gptResult, {
+          align: 'justify',
+          lineGap: 5
+        });
+      }
+      
+      // Thông tin footer
+      doc.moveDown(4);
+      const today = new Date();
+      doc.fontSize(10).text(`Ngày tạo: ${today.toLocaleDateString('vi-VN')}`, {
+        align: 'center'
+      });
+      
+      // Hoàn tất PDF
+      doc.end();
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Dọn dẹp các file PDF cũ
+ * Xóa các file cũ hơn 30 ngày
+ */
+function cleanupOldPDFs() {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  fs.readdir(pdfDir, (err, files) => {
+    if (err) {
+      console.error('Error reading PDF directory:', err);
+      return;
+    }
+    
+    files.forEach(file => {
+      const filePath = path.join(pdfDir, file);
+      fs.stat(filePath, (err, stats) => {
+        if (err) {
+          console.error(`Error getting stats for file ${file}:`, err);
+          return;
+        }
+        
+        if (stats.isFile() && stats.mtime < thirtyDaysAgo) {
+          fs.unlink(filePath, err => {
+            if (err) console.error(`Error deleting file ${file}:`, err);
+            else console.log(`Deleted old PDF: ${file}`);
+          });
+        }
+      });
+    });
+  });
+}
+
+// Chạy dọn dẹp mỗi ngày
+setInterval(cleanupOldPDFs, 24 * 60 * 60 * 1000);
 
 /**
  * API Route 1: Hiển thị trang admin trực tiếp từ root path
@@ -532,19 +675,69 @@ app.post('/api/webhook/result', async (req, res) => {
     // Tạo mảng response
     const messages = [];
     
-    // Thêm kết quả GPT
-    messages.push({ "text": sessionData.gptResult });
-    
-    // Thêm ảnh ghép vào response nếu có
-    if (sessionData.compositeImageUrl) {
+    // Tạo file PDF cho kết quả đọc bài
+    try {
+      // Kiểm tra xem PDF đã tồn tại chưa
+      const pdfFileName = `${sessionData.id}.pdf`;
+      const pdfFullPath = path.join(pdfDir, pdfFileName);
+      
+      // Nếu chưa có PDF, tạo mới
+      if (!fs.existsSync(pdfFullPath)) {
+        await generateTarotPDF(sessionData);
+        console.log(`PDF created for session ${sessionData.id}`);
+      }
+      
+      // Tạo URL cho file PDF
+      const pdfUrl = `${baseUrl}/pdfs/${pdfFileName}`;
+      
+      // Thêm kết quả GPT
+      messages.push({ "text": sessionData.gptResult });
+      
+      // Thêm ảnh ghép vào response nếu có
+      if (sessionData.compositeImageUrl) {
+        messages.push({
+          "attachment": {
+            "type": "image",
+            "payload": {
+              "url": `${baseUrl}${sessionData.compositeImageUrl}`
+            }
+          }
+        });
+      }
+      
+      // Thêm nút tải xuống PDF
       messages.push({
         "attachment": {
-          "type": "image",
+          "type": "template",
           "payload": {
-            "url": `${baseUrl}${sessionData.compositeImageUrl}`
+            "template_type": "button",
+            "text": "Bạn có thể tải xuống kết quả dạng PDF tại đây:",
+            "buttons": [
+              {
+                "type": "web_url",
+                "url": pdfUrl,
+                "title": "Tải xuống PDF"
+              }
+            ]
           }
         }
       });
+      
+    } catch (pdfError) {
+      console.error('Error creating PDF:', pdfError);
+      // Vẫn tiếp tục trả về kết quả text nếu có lỗi khi tạo PDF
+      messages.push({ "text": sessionData.gptResult });
+      
+      if (sessionData.compositeImageUrl) {
+        messages.push({
+          "attachment": {
+            "type": "image",
+            "payload": {
+              "url": `${baseUrl}${sessionData.compositeImageUrl}`
+            }
+          }
+        });
+      }
     }
     
     // Trả về kết quả theo định dạng Chatfuel
