@@ -35,6 +35,16 @@ try {
 
 // Môi trường đã được cấu hình bởi dotenv ở trên
 
+// Thư mục lưu PDF trên Render disk
+const pdfDir = process.env.NODE_ENV === 'production'
+  ? path.join('/mnt/data', 'pdfs')
+  : path.join(__dirname, 'pdfs');
+
+// Đảm bảo thư mục PDF tồn tại
+if (!fs.existsSync(pdfDir)) {
+  fs.mkdirSync(pdfDir, { recursive: true });
+}
+
 // Create Express app
 const app = express();
 
@@ -133,15 +143,6 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
-// Thư mục lưu PDF trên Render disk
-const pdfDir = process.env.NODE_ENV === 'production'
-  ? path.join('/mnt/data', 'pdfs')
-  : path.join(__dirname, 'pdfs');
-
-// Đảm bảo thư mục PDF tồn tại
-if (!fs.existsSync(pdfDir)) {
-  fs.mkdirSync(pdfDir, { recursive: true });
-}
 
 // Thêm middleware để kiểm tra thư mục static
 app.use((req, res, next) => {
