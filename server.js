@@ -672,23 +672,13 @@ app.post('/api/webhook', async (req, res) => {
     
     // Kiểm tra cả trường hợp messenger user id từ Chatfuel
     const uid = req.body.uid || req.body['messenger user id'];
-    const full_name = req.body.full_name || req.body['full_name'];
-    const dob = req.body.dob || req.body['dob'];
+    // Chỉ lấy cardCount và bỏ qua full_name và dob
     const cardCount = req.body.cardCount || 3;
     
     if (!uid) {
       return res.json({
         messages: [{
           text: "Lỗi: Thiếu thông tin người dùng"
-        }]
-      });
-    }
-    
-    // Kiểm tra định dạng ngày sinh nếu được cung cấp
-    if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
-      return res.json({
-        messages: [{
-          text: "Lỗi: Ngày sinh phải có định dạng YYYY-MM-DD"
         }]
       });
     }
@@ -753,11 +743,9 @@ app.post('/api/webhook', async (req, res) => {
       // Không báo lỗi cho client, tiếp tục xử lý
     }
     
-    // Tạo session mới
+    // Tạo session mới - không cần full_name và dob nữa
     const newSession = db.addSession({
       uid,
-      full_name, // Họ tên đầy đủ
-      dob,      // Ngày sinh
       cards: selectedCards,
       compositeImage: compositeImageUrl, // Thêm đường dẫn ảnh ghép
       paid: false,
