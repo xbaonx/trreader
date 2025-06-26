@@ -178,13 +178,32 @@ async function generateTarotPDF(sessionData) {
       // Pipe PDF vào stream
       doc.pipe(stream);
       
-      // Thiết lập font
-      doc.font('Helvetica');
+      // Đường dẫn tới fonts
+      const fontPath = path.join(__dirname, 'fonts');
+      const regularFont = path.join(fontPath, 'NotoSans-Regular.ttf');
+      const boldFont = path.join(fontPath, 'NotoSans-Bold.ttf');
       
-      // Trang bìa
-      doc.fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', {
-        align: 'center'
-      });
+      // Kiểm tra xem fonts có tồn tại không
+      if (!fs.existsSync(regularFont) || !fs.existsSync(boldFont)) {
+        console.warn('Không tìm thấy font Noto Sans, sử dụng font mặc định');
+        doc.font('Helvetica');
+      } else {
+        // Thiết lập font hỗ trợ Unicode cho tiếng Việt
+        doc.registerFont('NotoRegular', regularFont);
+        doc.registerFont('NotoBold', boldFont);
+        doc.font('NotoRegular');
+      }
+      
+      // Trang bìa - Sử dụng font NotoBold cho tiêu đề
+      if (fs.existsSync(path.join(__dirname, 'fonts', 'NotoSans-Bold.ttf'))) {
+        doc.font('NotoBold').fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', {
+          align: 'center'
+        }).font('NotoRegular');
+      } else {
+        doc.fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', {
+          align: 'center'
+        });
+      }
       
       doc.moveDown(2);
       
@@ -221,7 +240,14 @@ async function generateTarotPDF(sessionData) {
       
       // Kết quả đọc bài
       if (sessionData.gptResult) {
-        doc.fontSize(16).text('Kết quả đọc bài:', { underline: true });
+        // Sử dụng font NotoBold cho tiêu đề kết quả
+        if (fs.existsSync(path.join(__dirname, 'fonts', 'NotoSans-Bold.ttf'))) {
+          doc.font('NotoBold').fontSize(16).text('Kết quả đọc bài:', { underline: true }).font('NotoRegular');
+        } else {
+          doc.fontSize(16).text('Kết quả đọc bài:', { underline: true });
+        }
+        
+        // Nội dung kết quả với font chữ hỗ trợ tiếng Việt
         doc.fontSize(12).text(sessionData.gptResult, {
           align: 'justify',
           lineGap: 5
