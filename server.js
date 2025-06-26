@@ -189,31 +189,66 @@ async function generateTarotPDF(sessionData) {
       // Pipe PDF vào stream
       doc.pipe(stream);
       
-      // Đường dẫn tới fonts
-      const fontPath = path.join(__dirname, 'fonts');
-      const regularFont = path.join(fontPath, 'NotoSans-Regular.ttf');
-      const boldFont = path.join(fontPath, 'NotoSans-Bold.ttf');
+      // Sử dụng font mặc định trước
+      doc.font('Helvetica');
       
-      // Kiểm tra xem fonts có tồn tại không
-      if (!fs.existsSync(regularFont) || !fs.existsSync(boldFont)) {
-        console.warn('Không tìm thấy font Noto Sans, sử dụng font mặc định');
-        doc.font('Helvetica');
+      // Chỉ thử sử dụng font Noto nếu ở môi trường development
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          // Register and use NotoSans fonts for Vietnamese
+          const fontPath = path.join(__dirname, 'fonts');
+          const regularFont = path.join(fontPath, 'NotoSans-Regular.ttf');
+          const boldFont = path.join(fontPath, 'NotoSans-Bold.ttf');
+          
+          console.log('Kiểm tra font path:', {
+            fontPath,
+            regularFont,
+            boldFont,
+            regularExists: fs.existsSync(regularFont),
+            boldExists: fs.existsSync(boldFont)
+          });
+          
+          if (fs.existsSync(regularFont)) {
+            try {
+              doc.registerFont('NotoRegular', regularFont);
+              doc.font('NotoRegular');
+              console.log('Sử dụng font NotoRegular');
+            } catch (fontError) {
+              console.error('Không thể đăng ký font NotoRegular:', fontError.message);
+            }
+          }
+          
+          if (fs.existsSync(boldFont)) {
+            try {
+              doc.registerFont('NotoBold', boldFont);
+              console.log('Sử dụng font NotoBold cho tiêu đề');
+            } catch (fontError) {
+              console.error('Không thể đăng ký font NotoBold:', fontError.message);
+            }
+          }
+        } catch (fontError) {
+          console.error('Lỗi khi tải font:', fontError);
+          // Tiếp tục với font mặc định
+        }
       } else {
-        // Thiết lập font hỗ trợ Unicode cho tiếng Việt
-        doc.registerFont('NotoRegular', regularFont);
-        doc.registerFont('NotoBold', boldFont);
-        doc.font('NotoRegular');
+        console.log('Chạy trong môi trường production, bỏ qua việc tải font tùy chỉnh');
       }
       
-      // Trang bìa - Sử dụng font NotoBold cho tiêu đề
-      if (fs.existsSync(path.join(__dirname, 'fonts', 'NotoSans-Bold.ttf'))) {
-        doc.font('NotoBold').fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', {
-          align: 'center'
-        }).font('NotoRegular');
-      } else {
-        doc.fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', {
-          align: 'center'
-        });
+      // Trang bìa - Tiêu đề chính
+      try {
+        if (process.env.NODE_ENV !== 'production' && doc._fonts['NotoBold']) {
+          doc.font('NotoBold').fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', { align: 'center' });
+          if (doc._fonts['NotoRegular']) {
+            doc.font('NotoRegular');
+          } else {
+            doc.font('Helvetica');
+          }
+        } else {
+          doc.fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', { align: 'center' });
+        }
+      } catch (fontErr) {
+        console.warn('Lỗi khi sử dụng font tùy chỉnh cho tiêu đề:', fontErr.message);
+        doc.font('Helvetica').fontSize(24).text('KẾT QUẢ ĐỌC BÀI TAROT', { align: 'center' });
       }
       
       doc.moveDown(2);
@@ -289,26 +324,73 @@ async function generateTarotPDF(sessionData) {
       
       // Kết quả đọc bài
       if (sessionData.gptResult) {
-        // Sử dụng font NotoBold cho tiêu đề kết quả
-        if (fs.existsSync(path.join(__dirname, 'fonts', 'NotoSans-Bold.ttf'))) {
-          doc.font('NotoBold').fontSize(16).text('Kết quả đọc bài:', { underline: true }).font('NotoRegular');
-        } else {
-          doc.fontSize(16).text('Kết quả đọc bài:', { underline: true });
+        try {
+          // Tiêu đề thông tin
+          if (process.env.NODE_ENV !== 'production' && doc._fonts && doc._fonts['NotoBold']) {
+            doc.font('NotoBold').fontSize(14).text('Thông tin:');
+            if (doc._fonts['NotoRegular']) {
+              doc.font('NotoRegular');
+            } else {
+              doc.font('Helvetica');
+            }
+          } else {
+            doc.font('Helvetica').fontSize(14).text('Thông tin:');
+          }
+          
+          // Thông tin người dùng
+          doc.moveDown(0.5);
+          doc.text(`Họ tên: ${sessionData.full_name || sessionData.name || 'Không có thông tin'}`);
+          doc.text(`Ngày sinh: ${sessionData.dob ? new Date(sessionData.dob).toLocaleDateString('vi-VN') : 'Không có thông tin'}`);
+          doc.text(`Ngày đọc bài: ${new Date(sessionData.timestamp || Date.now()).toLocaleDateString('vi-VN')}`);
+          doc.moveDown(2);
+        } catch (infoErr) {
+          console.warn('Lỗi khi thêm thông tin người dùng:', infoErr.message);
+          // Fallback an toàn nếu có lỗi
+          doc.font('Helvetica');
+          doc.fontSize(14).text('Thông tin:');
+          doc.moveDown(0.5);
+          doc.text(`Họ tên: ${sessionData.full_name || sessionData.name || 'Không có thông tin'}`);
+          doc.text(`Ngày đọc bài: ${new Date(sessionData.timestamp || Date.now()).toLocaleDateString('vi-VN')}`);
+          doc.moveDown(2);
         }
         
-        // Nội dung kết quả với font chữ hỗ trợ tiếng Việt
-        doc.fontSize(12).text(sessionData.gptResult, {
-          align: 'justify',
-          lineGap: 5
-        });
+        // Tiêu đề kết quả đọc bài
+        if (process.env.NODE_ENV !== 'production' && doc._fonts && doc._fonts['NotoBold']) {
+          doc.font('NotoBold').fontSize(16).text('Kết quả đọc bài:', { underline: true });
+          if (doc._fonts['NotoRegular']) {
+            doc.font('NotoRegular');
+          } else {
+            doc.font('Helvetica');
+          }
+        } else {
+          doc.font('Helvetica').fontSize(16).text('Kết quả đọc bài:', { underline: true });
+        }
+        
+        doc.moveDown();
+        // Nội dung kết quả
+        try {
+          doc.text(sessionData.gptResult);
+        } catch (resultErr) {
+          console.error('Lỗi khi hiển thị kết quả:', resultErr.message);
+          // Fallback về font mặc định và thử lại
+          doc.font('Helvetica');
+          doc.text(sessionData.gptResult || 'Không thể hiển thị kết quả đọc bài. Vui lòng thử lại sau.');
+        }
       }
       
-      // Thông tin footer
-      doc.moveDown(4);
-      const today = new Date();
-      doc.fontSize(10).text(`Ngày tạo: ${today.toLocaleDateString('vi-VN')}`, {
-        align: 'center'
-      });
+      // Chú thích footer
+      try {
+        const footerText = 'PDF được tạo tự động từ hệ thống đọc bài Tarot';
+
+        // Đảm bảo dùng font mặc định cho footer
+        doc.font('Helvetica').fontSize(10).text(footerText, {
+          align: 'center'
+        }).text(new Date().toLocaleDateString('vi-VN'), {
+          align: 'center'
+        });
+      } catch (footerErr) {
+        console.warn('Lỗi khi thêm footer:', footerErr.message);
+      }
       
       // Hoàn tất PDF
       doc.end();
