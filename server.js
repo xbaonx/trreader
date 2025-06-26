@@ -665,7 +665,16 @@ app.use('/admin', adminRoutes(db, gpt, upload, generateTarotPDF, pdfDir));
  */
 app.post('/api/webhook', async (req, res) => {
   try {
-    const { uid, full_name, dob, cardCount = 3 } = req.body;
+    // Ghi log đầy đủ request body để debug
+    console.log('============= WEBHOOK REQUEST ==============');
+    console.log('Webhook request body:', JSON.stringify(req.body, null, 2));
+    console.log('Webhook request headers:', JSON.stringify(req.headers, null, 2));
+    
+    // Kiểm tra cả trường hợp messenger user id từ Chatfuel
+    const uid = req.body.uid || req.body['messenger user id'];
+    const full_name = req.body.full_name || req.body['full_name'];
+    const dob = req.body.dob || req.body['dob'];
+    const cardCount = req.body.cardCount || 3;
     
     if (!uid) {
       return res.json({
