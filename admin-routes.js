@@ -222,8 +222,20 @@ module.exports = function(db, gpt, upload, generateTarotPDF, pdfDir) {
       });
       
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      res.status(500).json({ error: 'Lỗi khi tạo PDF' });
+      console.error('Error generating PDF in admin-routes.js:', error);
+      console.error('Error details:', JSON.stringify({
+        errorMessage: error.message,
+        errorStack: error.stack,
+        sessionId: req.body.sessionId,
+        hasGeneratePDF: typeof generateTarotPDF === 'function',
+        hasPdfDir: !!pdfDir,
+        pdfDirValue: pdfDir
+      }));
+      
+      res.status(500).json({
+        error: `Lỗi khi tạo PDF: ${error.message}`,
+        details: error.stack ? error.stack.split('\n')[0] : 'Không có thông tin chi tiết'
+      });
     }
   });
 

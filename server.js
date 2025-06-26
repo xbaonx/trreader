@@ -303,7 +303,15 @@ async function generateTarotPDF(sessionData) {
       doc.end();
       
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('Error generating PDF in server.js:', error);
+      console.error('Error details:', JSON.stringify({
+        errorMessage: error.message,
+        errorStack: error.stack,
+        sessionId: sessionData.id,
+        compositeImagePath: sessionData.compositeImageUrl,
+        environment: process.env.NODE_ENV,
+        pdfDirValue: pdfDir
+      }));
       reject(error);
     }
   });
