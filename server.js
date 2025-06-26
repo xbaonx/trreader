@@ -165,6 +165,17 @@ app.use((req, res, next) => {
 async function generateTarotPDF(sessionData) {
   return new Promise((resolve, reject) => {
     try {
+      // Kiểm tra dữ liệu đầu vào
+      if (!sessionData || !sessionData.id) {
+        throw new Error('Dữ liệu phiên đọc bài không hợp lệ: Thiếu ID');
+      }
+      
+      if (!sessionData.gptResult) {
+        throw new Error('Dữ liệu phiên đọc bài không hợp lệ: Thiếu kết quả GPT');
+      }
+      
+      console.log('Bắt đầu tạo PDF cho session:', sessionData.id);
+      
       const sessionId = sessionData.id;
       const pdfPath = path.join(pdfDir, `${sessionId}.pdf`);
       const doc = new PDFDocument({ size: 'A4', margin: 50 });

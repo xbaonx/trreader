@@ -198,6 +198,27 @@ module.exports = function(db, gpt, upload, generateTarotPDF, pdfDir) {
       if (!sessionData.gptResult) {
         return res.status(400).json({ error: 'Session chưa có kết quả đọc bài' });
       }
+      
+      // Chuẩn bị dữ liệu session đầy đủ trước khi gửi đến hàm generateTarotPDF
+      const preparedSessionData = {
+        ...sessionData,
+        // Đảm bảo các trường quan trọng luôn tồn tại
+        id: sessionData.id || sessionId,
+        userInfo: {
+          name: sessionData.name || sessionData.full_name || 'Khách hàng',
+          dob: sessionData.dob || ''
+        }
+      };
+      
+      // Kiểm tra compositeImageUrl nếu không tồn tại hoặc không đúng định dạng
+      if (!sessionData.compositeImageUrl && sessionData.compositeImage) {
+        preparedSessionData.compositeImageUrl = sessionData.compositeImage;
+      } else if (!sessionData.compositeImageUrl) {
+        // Tạo đường dẫn ảnh mặc định dựa trên ID hoặc các lá bài
+        const defaultImagePath = `/images/composite-${sessionData.id}.jpg`;
+        preparedSessionData.compositeImageUrl = defaultImagePath;
+        console.log(`Không tìm thấy đường dẫn ảnh, sử dụng đường dẫn mặc định: ${defaultImagePath}`);
+      }
 
       // Xóa PDF cũ nếu có
       const pdfFileName = `${sessionData.id}.pdf`;
@@ -206,8 +227,9 @@ module.exports = function(db, gpt, upload, generateTarotPDF, pdfDir) {
         fs.unlinkSync(pdfFullPath);
       }
       
-      // Tạo PDF mới
-      await generateTarotPDF(sessionData);
+      // Gọi generateTarotPDF với dữ liệu đã được chuẩn bị
+      console.log('Gọi hàm generateTarotPDF với dữ liệu:', JSON.stringify(preparedSessionData, null, 2));
+      await generateTarotPDF(preparedSessionData);
       
       // Tạo URL cho file PDF
       const baseUrl = process.env.NODE_ENV === 'production' 
