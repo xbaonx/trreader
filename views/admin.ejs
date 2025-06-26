@@ -312,10 +312,18 @@
           <button type="button" class="btn btn-primary" id="btnSave">
             <i class="fas fa-save"></i> Lưu Thay Đổi
           </button>
+          <button type="button" class="btn btn-info" id="btnGeneratePDF">
+            <i class="fas fa-file-pdf"></i> Tạo PDF
+          </button>
           <button type="button" class="btn btn-danger" id="btnDelete">
             <i class="fas fa-trash"></i> Xóa Session
           </button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+          <div id="pdfLinkContainer" class="mt-2 w-100 hidden">
+            <a href="#" id="pdfDownloadLink" class="btn btn-sm btn-outline-success w-100" target="_blank">
+              <i class="fas fa-download"></i> Tải xuống PDF
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -296,6 +296,45 @@ function bindSessionEvents() {
     });
   }
   
+  // Nút tạo PDF
+  const btnGeneratePDF = document.getElementById('btnGeneratePDF');
+  const pdfLinkContainer = document.getElementById('pdfLinkContainer');
+  const pdfDownloadLink = document.getElementById('pdfDownloadLink');
+  
+  if (btnGeneratePDF) {
+    btnGeneratePDF.addEventListener('click', () => {
+      if (!state.currentSession) return;
+      
+      btnGeneratePDF.disabled = true;
+      btnGeneratePDF.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tạo PDF...';
+      pdfLinkContainer.classList.add('hidden');
+      
+      axios.post('/admin/generate-pdf', { sessionId: state.currentSession.id })
+        .then(response => {
+          if (response.data && response.data.success) {
+            showToast('Đã tạo PDF thành công!', 'success');
+            
+            // Hiển thị link tải xuống
+            pdfLinkContainer.classList.remove('hidden');
+            pdfDownloadLink.href = response.data.pdfUrl;
+            pdfDownloadLink.textContent = `Tải xuống PDF (${state.currentSession.name || state.currentSession.id})`;
+          }
+        })
+        .catch(error => {
+          console.error('Error generating PDF:', error);
+          if (error.response && error.response.data && error.response.data.error) {
+            showToast(`Lỗi: ${error.response.data.error}`, 'danger');
+          } else {
+            showToast('Lỗi khi tạo file PDF', 'danger');
+          }
+        })
+        .finally(() => {
+          btnGeneratePDF.disabled = false;
+          btnGeneratePDF.innerHTML = '<i class="fas fa-file-pdf"></i> Tạo PDF';
+        });
+    });
+  }
+
   if (btnDelete) {
     btnDelete.addEventListener('click', () => {
       if (!state.currentSession) return;
