@@ -490,7 +490,7 @@ app.get('/result', (req, res) => {
  * Sử dụng router admin
  * Các route được định nghĩa trong admin-routes.js
  */
-app.use('/admin', adminRoutes(db, gpt, upload));
+app.use('/admin', adminRoutes(db, gpt, upload, generateTarotPDF, pdfDir));
 
 // ========== CHATFUEL WEBHOOK API ==========
 

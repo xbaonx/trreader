@@ -9,7 +9,7 @@ const fs = require('fs-extra');
 const { createObjectCsvWriter } = require('csv-writer');
 
 // Export function để tạo router
-module.exports = function(db, gpt, upload) {
+module.exports = function(db, gpt, upload, generateTarotPDF, pdfDir) {
   const router = express.Router();
   
   /**
@@ -173,6 +173,57 @@ module.exports = function(db, gpt, upload) {
     } catch (error) {
       console.error('Error in /admin/filter endpoint:', error);
       res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+    }
+  });
+
+  /**
+   * Tạo hoặc tạo lại file PDF cho kết quả đọc bài
+   * POST /admin/generate-pdf
+   */
+  router.post('/generate-pdf', async (req, res) => {
+    try {
+      const { sessionId } = req.body;
+      
+      if (!sessionId) {
+        return res.status(400).json({ error: 'Session ID là bắt buộc' });
+      }
+      
+      // Tìm session theo ID
+      const sessionData = db.getSessionById(sessionId);
+      
+      if (!sessionData) {
+        return res.status(404).json({ error: 'Không tìm thấy session' });
+      }
+      
+      if (!sessionData.gptResult) {
+        return res.status(400).json({ error: 'Session chưa có kết quả đọc bài' });
+      }
+
+      // Xóa PDF cũ nếu có
+      const pdfFileName = `${sessionData.id}.pdf`;
+      const pdfFullPath = path.join(pdfDir, pdfFileName);
+      if (fs.existsSync(pdfFullPath)) {
+        fs.unlinkSync(pdfFullPath);
+      }
+      
+      // Tạo PDF mới
+      await generateTarotPDF(sessionData);
+      
+      // Tạo URL cho file PDF
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? `https://${req.headers.host}` 
+        : `http://${req.headers.host}`;
+      const pdfUrl = `${baseUrl}/pdfs/${pdfFileName}`;
+      
+      res.json({ 
+        success: true, 
+        message: 'Tạo PDF thành công', 
+        pdfUrl 
+      });
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      res.status(500).json({ error: 'Lỗi khi tạo PDF' });
     }
   });
 
