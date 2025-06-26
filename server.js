@@ -228,10 +228,48 @@ async function generateTarotPDF(sessionData) {
       
       // Ảnh ghép lá bài
       if (sessionData.compositeImageUrl) {
-        const imagePath = path.join(__dirname, 'public', sessionData.compositeImageUrl);
-        if (fs.existsSync(imagePath)) {
-          doc.image(imagePath, {
-            fit: [500, 300],
+        try {
+          // Xác định đường dẫn đến ảnh dựa vào môi trường
+          let imagePath;
+          // compositeImageUrl thường có dạng /images/composite-session-id.jpg
+          // Cần loại bỏ dấu / đầu tiên để tham chiếu đúng từ public
+          const relativePath = sessionData.compositeImageUrl.startsWith('/') 
+            ? sessionData.compositeImageUrl.substring(1) 
+            : sessionData.compositeImageUrl;
+            
+          if (process.env.NODE_ENV === 'production') {
+            // Trong production, ảnh được lưu tại /mnt/data/images
+            const filename = path.basename(sessionData.compositeImageUrl);
+            imagePath = path.join('/mnt/data', 'images', filename);
+            
+            // Nếu không tìm thấy, thử đường dẫn thay thế
+            if (!fs.existsSync(imagePath)) {
+              imagePath = path.join('/mnt/data', relativePath);
+            }
+          } else {
+            // Trong development
+            imagePath = path.join(__dirname, 'public', relativePath);
+          }
+          
+          console.log(`Đang thử tải ảnh từ đường dẫn: ${imagePath}`);
+          
+          // Kiểm tra xem file có tồn tại không
+          if (fs.existsSync(imagePath)) {
+            doc.image(imagePath, {
+              fit: [500, 300],
+              align: 'center'
+            });
+            doc.moveDown();
+          } else {
+            console.warn(`Không tìm thấy ảnh ghép tại: ${imagePath}`);
+            doc.text('[Không tìm thấy ảnh lá bài]', {
+              align: 'center'
+            });
+            doc.moveDown();
+          }
+        } catch (imgError) {
+          console.error('Lỗi khi xử lý ảnh trong PDF:', imgError);
+          doc.text('[Lỗi khi tải ảnh lá bài]', {
             align: 'center'
           });
           doc.moveDown();
