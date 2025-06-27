@@ -754,12 +754,12 @@ app.post('/api/webhook', async (req, res) => {
       // Tiếp tục với gptResult = null
     }
     
-    // Tạo session mới - đã có kết quả GPT
+    // Tạo session mới - đã có kết quả GPT nhưng chưa thanh toán
     const newSession = db.addSession({
       uid,
       cards: selectedCards,
       compositeImage: compositeImageUrl,
-      paid: true, // Đánh dấu đã thanh toán
+      paid: false, // Chưa đánh dấu thanh toán vì người dùng chưa trả tiền
       gptResult: gptResult,
     });
     
