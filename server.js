@@ -676,7 +676,6 @@ app.post('/api/webhook', async (req, res) => {
     const cardCount = req.body.cardCount || 3;
     
     if (!uid) {
-      console.log('Error: Missing user ID');
       return res.json({
         messages: [{
           text: "Lỗi: Thiếu thông tin người dùng"
@@ -702,7 +701,6 @@ app.post('/api/webhook', async (req, res) => {
     }
     
     if (cardImages.length < actualCardCount) {
-      console.log(`Error: Not enough tarot card images (need at least ${actualCardCount})`);
       return res.json({
         messages: [{
           text: `Không đủ ảnh lá bài tarot (cần ít nhất ${actualCardCount} lá)`
@@ -751,8 +749,7 @@ app.post('/api/webhook', async (req, res) => {
       cards: selectedCards,
       compositeImage: compositeImageUrl, // Thêm đường dẫn ảnh ghép
       paid: false,
-      gptResult: null, // Kết quả đọc bài chuyên sâu (trả phí)
-      basicResult: null, // Kết quả đọc bài cơ bản (miễn phí)
+      gptResult: null,
     });
     
     // Chuẩn bị URL cho Chatfuel
@@ -760,29 +757,15 @@ app.post('/api/webhook', async (req, res) => {
       ? `https://${req.headers.host}` 
       : `http://${req.headers.host}`;
       
-    // Tạo phiên đọc bài tarot cơ bản (miễn phí)
-    let basicReading = null;
-    try {
-      // Tạo kết quả đọc bài cơ bản (rút gọn)
-      basicReading = await gpt.generateTarotReading(selectedCards, { name: "Bạn", dob: "" });
-      console.log('Generated basic tarot reading for webhook');
-      
-      // Lưu kết quả đọc bài cơ bản vào session
-      db.updateSession(newSession.id, { basicResult: basicReading });
-    } catch (error) {
-      console.error('Error generating basic tarot reading:', error);
-      basicReading = "Rất tiếc, không thể tạo kết quả đọc bài lúc này. Vui lòng thử lại sau.";
-    }
-    
     // Trả về thông tin theo định dạng Chatfuel
-    // Khởi tạo mảng messages
+    // Không gửi từng ảnh lá bài riêng nữa
+    
+    // Khởi tạo mảng messages trống
     const messages = [];
     
-    // Gửi tin nhắn văn bản đơn giản trước
-    messages.push({ "text": "🎲 Đây là ba lá bài tarot của bạn:" });
-    
-    // Thêm ảnh ghép vào response
+    // Thêm ảnh ghép vào response nếu có
     if (compositeImageUrl) {
+      messages.push({ "text": "👆 Here are your three tarot cards" });
       messages.push({
         "attachment": {
           "type": "image",
@@ -793,63 +776,20 @@ app.post('/api/webhook', async (req, res) => {
       });
     }
     
-    // Thêm kết quả đọc bài cơ bản - chia nhỏ để tránh quá dài
-    if (basicReading) {
-      // Tách kết quả dài thành các đoạn nhỏ hơn (dưới 2000 ký tự)
-      messages.push({ "text": "📜 Kết quả đọc bài cơ bản (miễn phí):" });
-      
-      const maxLength = 1000;
-      let remaining = basicReading;
-      while (remaining.length > 0) {
-        const chunk = remaining.substring(0, maxLength);
-        messages.push({ "text": chunk });
-        remaining = remaining.substring(maxLength);
-      }
-      
-      // Thêm nút để chuyển đến phần đọc bài chuyên sâu (trả phí)
-      messages.push({
-        "attachment": {
-          "type": "template",
-          "payload": {
-            "template_type": "button",
-            "text": "Bạn muốn có kết quả đọc bài chi tiết hơn và hỏi đáp thêm?",
-            "buttons": [
-              {
-                "type": "show_block",
-                "block_names": ["Premium Reading"],
-                "title": "Đọc bài chuyên sâu"
-              }
-            ]
-          }
-        }
-      });
-    }
+    // Không thêm nút xem kết quả nữa
     
-    // Phản hồi theo đúng định dạng Chatfuel yêu cầu
-    const response = {
+    res.json({
       "messages": messages,
-      "set_attributes": {
-        "session_id": newSession.id
-      }
-    };
-    
-    // Log response chi tiết để debug
-    console.log('============= WEBHOOK RESPONSE ==============');
-    console.log('Response to Chatfuel:', JSON.stringify(response, null, 2));
-    
-    // Gửi phản hồi
-    res.json(response);
+      "session_id": newSession.id
+    });
     
   } catch (error) {
     console.error('Error in /api/webhook endpoint:', error);
-    // Đảm bảo định dạng phản hồi lỗi cũng tuân thủ tiêu chuẩn Chatfuel
-    const errorResponse = {
+    res.json({
       "messages": [
         { "text": "Đã xảy ra lỗi. Vui lòng thử lại sau." }
       ]
-    };
-    console.log('Error response:', JSON.stringify(errorResponse, null, 2));
-    res.json(errorResponse);
+    });
   }
 });
 
@@ -880,59 +820,13 @@ app.post('/api/webhook/result', async (req, res) => {
       });
     }
     
-    // Kiểm tra xem phiên đã được thanh toán và có kết quả đọc bài chuyên sâu hay chưa
+    // Kiểm tra xem phiên đã được thanh toán và có kết quả đọc bài hay chưa
     if (!sessionData.paid || !sessionData.gptResult) {
-      // Nếu không có kết quả chuyên sâu, nhưng có kết quả cơ bản, hiển thị kết quả cơ bản
-      if (sessionData.basicResult) {
-        console.log('Returning basic result (unpaid session)'); 
-        
-        // Tạo danh sách tin nhắn
-        const basicMessages = [];
-        basicMessages.push({ "text": "📜 Kết quả đọc bài cơ bản (miễn phí)" });
-        
-        // Chia nhỏ kết quả đọc bài cơ bản
-        const maxLength = 1000;
-        let remaining = sessionData.basicResult;
-        while (remaining.length > 0) {
-          const chunk = remaining.substring(0, maxLength);
-          basicMessages.push({ "text": chunk });
-          remaining = remaining.substring(maxLength);
-        }
-        
-        basicMessages.push({ "text": "Phiên đọc bài chuyên sâu chưa được thanh toán hoặc xử lý. Vui lòng thanh toán để xem kết quả đọc bài chi tiết." });
-
-        // Thêm nút chuyển đến phần thanh toán
-        basicMessages.push({
-          "attachment": {
-            "type": "template",
-            "payload": {
-              "template_type": "button",
-              "text": "Bạn muốn có kết quả đọc bài chi tiết hơn và hỏi đáp thêm?",
-              "buttons": [
-                {
-                  "type": "show_block",
-                  "block_names": ["Payment Block"],
-                  "title": "Thanh toán và đọc bài chi tiết"
-                }
-              ]
-            }
-          }
-        });
-        
-        const response = { "messages": basicMessages };
-        console.log('Basic result response:', JSON.stringify(response, null, 2));
-        return res.json(response);
-      } else {
-        // Nếu không có cả kết quả cơ bản và chuyên sâu
-        console.log('No results available for session');
-        const response = {
-          "messages": [
-            { "text": "Phiên đọc bài chưa được xử lý hoặc thanh toán. Vui lòng quay lại sau." }
-          ]
-        };
-        console.log('No results response:', JSON.stringify(response, null, 2));
-        return res.json(response);
-      }
+      return res.json({
+        "messages": [
+          { "text": "Phiên đọc bài chưa được xử lý hoặc thanh toán. Vui lòng quay lại sau." }
+        ]
+      });
     }
     
     // Chuẩn bị URL cho Chatfuel
@@ -958,11 +852,12 @@ app.post('/api/webhook/result', async (req, res) => {
       // Tạo URL cho file PDF
       const pdfUrl = `${baseUrl}/pdfs/${pdfFileName}`;
       
-      // Gửi tin nhắn giới thiệu
-      messages.push({ "text": "🌟 Kết quả đọc bài chuyên sâu (trả phí)" });
+      // Thêm kết quả GPT
+      messages.push({ "text": sessionData.gptResult });
       
-      // Thêm ảnh ghép vào response nếu có 
+      // Thêm ảnh ghép vào response nếu có
       if (sessionData.compositeImageUrl) {
+        messages.push({ "text": "👆 Here are your three tarot cards" });
         messages.push({
           "attachment": {
             "type": "image",
@@ -971,15 +866,6 @@ app.post('/api/webhook/result', async (req, res) => {
             }
           }
         });
-      }
-      
-      // Chia nhỏ kết quả đọc bài chuyên sâu
-      const maxLength = 1000;
-      let remaining = sessionData.gptResult;
-      while (remaining.length > 0) {
-        const chunk = remaining.substring(0, maxLength);
-        messages.push({ "text": chunk });
-        remaining = remaining.substring(maxLength);
       }
       
       // Thêm nút tải xuống PDF
@@ -1018,28 +904,17 @@ app.post('/api/webhook/result', async (req, res) => {
     }
     
     // Trả về kết quả theo định dạng Chatfuel
-    // Phản hồi theo đúng định dạng Chatfuel yêu cầu
-    const response = {
+    res.json({
       "messages": messages
-    };
-    
-    // Log response chi tiết để debug
-    console.log('============= WEBHOOK RESULT RESPONSE ==============');
-    console.log('Response to Chatfuel:', JSON.stringify(response, null, 2));
-    
-    // Gửi phản hồi
-    res.json(response);
+    });
     
   } catch (error) {
     console.error('Error in /api/webhook/result endpoint:', error);
-    // Đảm bảo định dạng phản hồi lỗi cũng tuân thủ tiêu chuẩn Chatfuel
-    const errorResponse = {
+    res.json({
       "messages": [
         { "text": "Đã xảy ra lỗi khi lấy kết quả đọc bài. Vui lòng thử lại sau." }
       ]
-    };
-    console.log('Error response in webhook/result:', JSON.stringify(errorResponse, null, 2));
-    res.json(errorResponse);
+    });
   }
 });
 
