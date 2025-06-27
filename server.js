@@ -743,13 +743,24 @@ app.post('/api/webhook', async (req, res) => {
       // Không báo lỗi cho client, tiếp tục xử lý
     }
     
-    // Tạo session mới - không cần full_name và dob nữa
+    // Lấy kết quả đọc bài trực tiếp từ GPT
+    let gptResult = null;
+    try {
+      console.log('Lấy kết quả đọc bài từ GPT...');
+      gptResult = await gpt.generateTarotReading(selectedCards, { name: uid });
+      console.log('Kết quả GPT:', gptResult.substring(0, 100) + '...');
+    } catch (gptError) {
+      console.error('Lỗi khi lấy kết quả từ GPT:', gptError);
+      // Tiếp tục với gptResult = null
+    }
+    
+    // Tạo session mới - đã có kết quả GPT
     const newSession = db.addSession({
       uid,
       cards: selectedCards,
-      compositeImage: compositeImageUrl, // Thêm đường dẫn ảnh ghép
-      paid: false,
-      gptResult: null,
+      compositeImage: compositeImageUrl,
+      paid: true, // Đánh dấu đã thanh toán
+      gptResult: gptResult,
     });
     
     // Chuẩn bị URL cho Chatfuel
@@ -763,9 +774,15 @@ app.post('/api/webhook', async (req, res) => {
     // Khởi tạo mảng messages trống
     const messages = [];
     
+    // Thêm kết quả GPT vào response nếu có
+    if (gptResult) {
+      messages.push({ "text": gptResult });
+    } else {
+      messages.push({ "text": "Không thể lấy kết quả đọc bài. Vui lòng thử lại sau." });
+    }
+    
     // Thêm ảnh ghép vào response nếu có
     if (compositeImageUrl) {
-      messages.push({ "text": "👆 Here are your three tarot cards" });
       messages.push({
         "attachment": {
           "type": "image",
