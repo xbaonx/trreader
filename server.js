@@ -776,9 +776,11 @@ app.post('/api/webhook', async (req, res) => {
     // Khởi tạo mảng messages
     const messages = [];
     
+    // Gửi tin nhắn văn bản đơn giản trước
+    messages.push({ "text": "🎲 Đây là ba lá bài tarot của bạn:" });
+    
     // Thêm ảnh ghép vào response
     if (compositeImageUrl) {
-      messages.push({ "text": "👆 Đây là ba lá bài tarot của bạn" });
       messages.push({
         "attachment": {
           "type": "image",
@@ -789,10 +791,18 @@ app.post('/api/webhook', async (req, res) => {
       });
     }
     
-    // Thêm kết quả đọc bài cơ bản
+    // Thêm kết quả đọc bài cơ bản - chia nhỏ để tránh quá dài
     if (basicReading) {
+      // Tách kết quả dài thành các đoạn nhỏ hơn (dưới 2000 ký tự)
       messages.push({ "text": "📜 Kết quả đọc bài cơ bản (miễn phí):" });
-      messages.push({ "text": basicReading });
+      
+      const maxLength = 1000;
+      let remaining = basicReading;
+      while (remaining.length > 0) {
+        const chunk = remaining.substring(0, maxLength);
+        messages.push({ "text": chunk });
+        remaining = remaining.substring(maxLength);
+      }
       
       // Thêm nút để chuyển đến phần đọc bài chuyên sâu (trả phí)
       messages.push({
@@ -800,7 +810,7 @@ app.post('/api/webhook', async (req, res) => {
           "type": "template",
           "payload": {
             "template_type": "button",
-            "text": "Bạn muốn có kết quả đọc bài chuyên sâu và hỏi đáp thêm?",
+            "text": "Bạn muốn có kết quả đọc bài chi tiết hơn và hỏi đáp thêm?",
             "buttons": [
               {
                 "type": "show_block",
@@ -813,10 +823,20 @@ app.post('/api/webhook', async (req, res) => {
       });
     }
     
-    res.json({
+    // Phản hồi theo đúng định dạng Chatfuel yêu cầu
+    const response = {
       "messages": messages,
-      "session_id": newSession.id
-    });
+      "set_attributes": {
+        "session_id": newSession.id
+      }
+    };
+    
+    // Log response chi tiết để debug
+    console.log('============= WEBHOOK RESPONSE ==============');
+    console.log('Response to Chatfuel:', JSON.stringify(response, null, 2));
+    
+    // Gửi phản hồi
+    res.json(response);
     
   } catch (error) {
     console.error('Error in /api/webhook endpoint:', error);
@@ -952,9 +972,17 @@ app.post('/api/webhook/result', async (req, res) => {
     }
     
     // Trả về kết quả theo định dạng Chatfuel
-    res.json({
+    // Phản hồi theo đúng định dạng Chatfuel yêu cầu
+    const response = {
       "messages": messages
-    });
+    };
+    
+    // Log response chi tiết để debug
+    console.log('============= WEBHOOK RESULT RESPONSE ==============');
+    console.log('Response to Chatfuel:', JSON.stringify(response, null, 2));
+    
+    // Gửi phản hồi
+    res.json(response);
     
   } catch (error) {
     console.error('Error in /api/webhook/result endpoint:', error);
