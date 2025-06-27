@@ -218,6 +218,14 @@ function updateSession(id, updatedData) {
     db.sessions[index].gptResult = updatedData.gptResult;
     db.sessions[index].editedAt = new Date().toISOString();
   }
+  // Thêm hỗ trợ trường basicResult cho kết quả đọc bài cơ bản (miễn phí)
+  if (updatedData.basicResult) {
+    db.sessions[index].basicResult = updatedData.basicResult;
+    // Cập nhật thời gian chỉnh sửa
+    if (!db.sessions[index].editedAt) {
+      db.sessions[index].editedAt = new Date().toISOString();
+    }
+  }
   if (updatedData.name) db.sessions[index].name = updatedData.name;
   if (updatedData.dob) db.sessions[index].dob = updatedData.dob;
   

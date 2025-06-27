@@ -749,7 +749,8 @@ app.post('/api/webhook', async (req, res) => {
       cards: selectedCards,
       compositeImage: compositeImageUrl, // Thêm đường dẫn ảnh ghép
       paid: false,
-      gptResult: null,
+      gptResult: null, // Kết quả đọc bài chuyên sâu (trả phí)
+      basicResult: null, // Kết quả đọc bài cơ bản (miễn phí)
     });
     
     // Chuẩn bị URL cho Chatfuel
@@ -757,15 +758,27 @@ app.post('/api/webhook', async (req, res) => {
       ? `https://${req.headers.host}` 
       : `http://${req.headers.host}`;
       
-    // Trả về thông tin theo định dạng Chatfuel
-    // Không gửi từng ảnh lá bài riêng nữa
+    // Tạo phiên đọc bài tarot cơ bản (miễn phí)
+    let basicReading = null;
+    try {
+      // Tạo kết quả đọc bài cơ bản (rút gọn)
+      basicReading = await gpt.generateTarotReading(selectedCards, { name: "Bạn", dob: "" });
+      console.log('Generated basic tarot reading for webhook');
+      
+      // Lưu kết quả đọc bài cơ bản vào session
+      db.updateSession(newSession.id, { basicResult: basicReading });
+    } catch (error) {
+      console.error('Error generating basic tarot reading:', error);
+      basicReading = "Rất tiếc, không thể tạo kết quả đọc bài lúc này. Vui lòng thử lại sau.";
+    }
     
-    // Khởi tạo mảng messages trống
+    // Trả về thông tin theo định dạng Chatfuel
+    // Khởi tạo mảng messages
     const messages = [];
     
-    // Thêm ảnh ghép vào response nếu có
+    // Thêm ảnh ghép vào response
     if (compositeImageUrl) {
-      messages.push({ "text": "👆 Here are your three tarot cards" });
+      messages.push({ "text": "👆 Đây là ba lá bài tarot của bạn" });
       messages.push({
         "attachment": {
           "type": "image",
@@ -776,7 +789,29 @@ app.post('/api/webhook', async (req, res) => {
       });
     }
     
-    // Không thêm nút xem kết quả nữa
+    // Thêm kết quả đọc bài cơ bản
+    if (basicReading) {
+      messages.push({ "text": "📜 Kết quả đọc bài cơ bản (miễn phí):" });
+      messages.push({ "text": basicReading });
+      
+      // Thêm nút để chuyển đến phần đọc bài chuyên sâu (trả phí)
+      messages.push({
+        "attachment": {
+          "type": "template",
+          "payload": {
+            "template_type": "button",
+            "text": "Bạn muốn có kết quả đọc bài chuyên sâu và hỏi đáp thêm?",
+            "buttons": [
+              {
+                "type": "show_block",
+                "block_names": ["Premium Reading"],
+                "title": "Đọc bài chuyên sâu"
+              }
+            ]
+          }
+        }
+      });
+    }
     
     res.json({
       "messages": messages,
@@ -820,13 +855,25 @@ app.post('/api/webhook/result', async (req, res) => {
       });
     }
     
-    // Kiểm tra xem phiên đã được thanh toán và có kết quả đọc bài hay chưa
+    // Kiểm tra xem phiên đã được thanh toán và có kết quả đọc bài chuyên sâu hay chưa
     if (!sessionData.paid || !sessionData.gptResult) {
-      return res.json({
-        "messages": [
-          { "text": "Phiên đọc bài chưa được xử lý hoặc thanh toán. Vui lòng quay lại sau." }
-        ]
-      });
+      // Nếu không có kết quả chuyên sâu, nhưng có kết quả cơ bản, hiển thị kết quả cơ bản
+      if (sessionData.basicResult) {
+        return res.json({
+          "messages": [
+            { "text": "📜 Kết quả đọc bài cơ bản (miễn phí)" },
+            { "text": sessionData.basicResult },
+            { "text": "Phiên đọc bài chuyên sâu chưa được thanh toán hoặc xử lý. Vui lòng thanh toán để xem kết quả đọc bài chi tiết." }
+          ]
+        });
+      } else {
+        // Nếu không có cả kết quả cơ bản và chuyên sâu
+        return res.json({
+          "messages": [
+            { "text": "Phiên đọc bài chưa được xử lý hoặc thanh toán. Vui lòng quay lại sau." }
+          ]
+        });
+      }
     }
     
     // Chuẩn bị URL cho Chatfuel
@@ -852,7 +899,8 @@ app.post('/api/webhook/result', async (req, res) => {
       // Tạo URL cho file PDF
       const pdfUrl = `${baseUrl}/pdfs/${pdfFileName}`;
       
-      // Thêm kết quả GPT
+      // Thêm kết quả đọc bài chuyên sâu (trả phí)
+      messages.push({ "text": "🔥 Kết quả đọc bài chuyên sâu (trả phí):" });
       messages.push({ "text": sessionData.gptResult });
       
       // Thêm ảnh ghép vào response nếu có
