@@ -53,10 +53,10 @@ async function generateTarotReading(cards, userInfo = {}) {
     const cardsList = cards.map((card, index) => `${index + 1}. ${card.name}`).join('\n');
     const fullPrompt = `${prompt}
 
-Các lá bài được rút:
+Cards drawn:
 ${cardsList}
 
-Vui lòng trả lời theo định dạng sau:
+Please respond in the following format:
 ${responseTemplate}`;
 
     // Sử dụng mô hình từ config hoặc fallback về gpt-3.5-turbo nếu không tồn tại
@@ -72,7 +72,7 @@ ${responseTemplate}`;
       model: model,
       messages: [
         { role: "system", content: prompt },
-        { role: "user", content: `Các lá bài được rút:\n${cardsList}\n\nVui lòng trả lời theo định dạng sau:\n${responseTemplate}` }
+        { role: "user", content: `Cards drawn:\n${cardsList}\n\nPlease respond in the following format:\n${responseTemplate}` }
       ],
       temperature: 0.7,
     });
