@@ -682,6 +682,11 @@ app.post('/api/webhook', async (req, res) => {
     
     // Kiểm tra cả trường hợp messenger user id từ Chatfuel
     const uid = req.body.uid || req.body['messenger user id'];
+    // Lấy tên và ngày sinh từ request
+    const first_name = req.body.first_name || req.body['first name'] || '';
+    const last_name = req.body.last_name || req.body['last name'] || '';
+    const name = req.body.name || (first_name && last_name ? `${first_name} ${last_name}` : first_name || 'Khách hàng');
+    const dob = req.body.dob || 'không xác định';
     // Chỉ lấy cardCount và bỏ qua full_name và dob
     const cardCount = req.body.cardCount || 3;
     // Lấy session_id nếu có để hỗ trợ lịch sử chat
@@ -795,11 +800,10 @@ app.post('/api/webhook', async (req, res) => {
         }
       } 
       
-      gptResult = await gpt.generateTarotReading(selectedCards, { name: uid }, userHistory);
+      gptResult = await gpt.generateTarotReading(selectedCards, { name, dob }, userHistory);
       console.log('Kết quả GPT:', gptResult.substring(0, 100) + '...');
       
-      // Lưu kết quả vào lịch sử chat
-      await gpt.addToChatHistory(newSession.id, 'assistant', gptResult);
+      // KHÔNG lưu kết quả vào lịch sử chat ở đây - sẽ làm sau khi tạo newSession
       
     } catch (gptError) {
       console.error('Lỗi khi lấy kết quả từ GPT:', gptError);
@@ -812,6 +816,8 @@ app.post('/api/webhook', async (req, res) => {
     // Tạo session mới - đã có kết quả GPT nhưng chưa thanh toán
     const newSession = db.addSession({
       uid,
+      name,
+      dob,
       cards: selectedCards,
       compositeImage: compositeImageUrl,
       paid: false, // Chưa đánh dấu thanh toán vì người dùng chưa trả tiền
