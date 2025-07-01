@@ -57,6 +57,54 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/admin', express.static('public'));
 app.use('/pdfs', express.static(pdfDir)); // Serve PDF files
 
+/**
+ * API endpoint để lấy lịch sử chat của một user
+ * GET /api/chat-history?uid=<user_id>
+ */
+app.get('/api/chat-history', (req, res) => {
+  try {
+    const uid = req.query.uid;
+    
+    if (!uid) {
+      return res.status(400).json({ 
+        error: "Thiếu tham số uid",
+        message: "Vui lòng cung cấp ID người dùng"
+      });
+    }
+    
+    console.log(`Đang lấy lịch sử chat cho user ${uid}`);
+    
+    // Lấy session mới nhất của user
+    const latestSession = db.getLatestSessionByUid(uid);
+    
+    if (!latestSession) {
+      return res.status(404).json({
+        error: "Không tìm thấy session",
+        message: `Không tìm thấy session nào cho user ${uid}`
+      });
+    }
+    
+    // Lấy lịch sử chat từ session
+    const chatHistory = latestSession.chatHistory || [];
+    
+    // Trả về lịch sử chat
+    res.json({
+      user_id: uid,
+      session_id: latestSession.id,
+      session_timestamp: latestSession.timestamp,
+      isPremium: latestSession.isPremium || false,
+      messages: chatHistory,
+      message_count: chatHistory.length
+    });
+  } catch (error) {
+    console.error(`Lỗi khi lấy lịch sử chat:`, error);
+    res.status(500).json({ 
+      error: "Lỗi server",
+      message: "Có lỗi xảy ra khi lấy lịch sử chat"
+    });
+  }
+});
+
 // Set up EJS as the view engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));

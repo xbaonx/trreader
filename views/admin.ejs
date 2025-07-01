@@ -324,6 +324,24 @@
               </div>
             </div>
           </div>
+          
+          <!-- Phần hiển thị lịch sử chat -->
+          <div id="chatHistoryContainer" class="mt-4">
+            <h6>
+              <i class="fas fa-comments"></i> Lịch Sử Chat
+              <button type="button" class="btn btn-sm btn-outline-primary float-end" id="btnLoadChatHistory">
+                <i class="fas fa-sync"></i> Tải lịch sử chat
+              </button>
+            </h6>
+            <div class="chat-history-content p-2" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px;">
+              <div id="chatHistoryList" class="list-group">
+                <!-- Lịch sử chat sẽ được hiển thị ở đây -->
+                <div class="text-center text-muted" id="chatHistoryPlaceholder">
+                  Nhấn nút "Tải lịch sử chat" để xem lịch sử cuộc trò chuyện
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-success" id="btnApprove">

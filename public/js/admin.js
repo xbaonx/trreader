@@ -167,16 +167,16 @@ function viewSession(sessionId) {
   document.getElementById('modalSessionTime').textContent = formatDate(session.timestamp);
   document.getElementById('modalSessionPaid').textContent = session.paid ? 'Đã thanh toán' : 'Chưa thanh toán';
   
-  // Cards
+  // Display cards
   const cardsContainer = document.getElementById('modalSessionCards');
   cardsContainer.innerHTML = '';
-  session.cards.forEach(card => {
+  
+  (session.cards || []).forEach(cardName => {
     const cardImg = document.createElement('img');
-    cardImg.src = card.image;
-    cardImg.alt = card.name;
+    cardImg.src = `/images/${cardName}`;
+    cardImg.alt = 'Tarot Card';
     cardImg.className = 'card-preview';
-    cardImg.title = card.name;
-    cardImg.addEventListener('click', () => previewCard(card.image, card.name));
+    cardImg.onclick = () => previewCard(cardName);
     cardsContainer.appendChild(cardImg);
   });
   
@@ -187,6 +187,13 @@ function viewSession(sessionId) {
   // Show/hide buttons based on status
   const btnApprove = document.getElementById('btnApprove');
   btnApprove.style.display = (!session.paid || !session.gptResult) ? 'block' : 'none';
+  
+  // Reset chat history placeholder
+  document.getElementById('chatHistoryList').innerHTML = `
+    <div class="text-center text-muted" id="chatHistoryPlaceholder">
+      Nhấn nút "Tải lịch sử chat" để xem lịch sử cuộc trò chuyện
+    </div>
+  `;
   
   // Show modal
   const sessionModal = new bootstrap.Modal(document.getElementById('sessionModal'));
@@ -205,18 +212,19 @@ function bindSessionEvents() {
       const startDate = document.getElementById('filterStartDate').value;
       const endDate = document.getElementById('filterEndDate').value;
       
-      axios.post('/admin/filter', { uid, startDate, endDate })
-        .then(response => {
-          if (response.data && response.data.success) {
-            state.sessions = response.data.sessions;
-            renderSessions();
-            showToast(`Đã tìm thấy ${state.sessions.length} kết quả`, 'info');
-          }
-        })
-        .catch(error => {
-          console.error('Error filtering sessions:', error);
-          showToast('Lỗi khi lọc phiên đọc bài', 'danger');
-        });
+      loadSessions(uid, startDate, endDate);
+    });
+  }
+  
+  // Tải lịch sử chat
+  const btnLoadChatHistory = document.getElementById('btnLoadChatHistory');
+  if (btnLoadChatHistory) {
+    btnLoadChatHistory.addEventListener('click', () => {
+      if (state.currentSession) {
+        loadChatHistory(state.currentSession.uid);
+      } else {
+        showToast('Không có phiên đang được chọn', 'warning');
+      }
     });
   }
   
@@ -362,4 +370,93 @@ function bindSessionEvents() {
       }
     });
   }
+}
+
+/**
+ * Load chat history for a specific user
+ * @param {string} uid - User ID to load chat history for
+ */
+function loadChatHistory(uid) {
+  if (!uid) return;
+  
+  // Hiển thị trạng thái đang tải
+  const chatHistoryList = document.getElementById("chatHistoryList");
+  chatHistoryList.innerHTML = `
+    <div class="text-center p-3">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải lịch sử chat...</p>
+    </div>
+  `;
+  
+  // Gọi API để lấy lịch sử chat
+  axios.get(`/api/chat-history?uid=${encodeURIComponent(uid)}`)
+    .then(response => {
+      if (response.data && response.data.messages) {
+        const messages = response.data.messages;
+        
+        if (messages.length === 0) {
+          chatHistoryList.innerHTML = `
+            <div class="alert alert-info">Chưa có lịch sử chat nào</div>
+          `;
+          return;
+        }
+        
+        // Hiển thị lịch sử chat
+        let html = "";
+        messages.forEach(msg => {
+          const isUser = msg.role === "user";
+          html += `
+            <div class="chat-message ${isUser ? "user-message" : "system-message"} p-2 mb-2 rounded">
+              <div class="message-header">
+                <strong>${isUser ? "Người dùng" : "Hệ thống"}</strong>
+              </div>
+              <div class="message-content">
+                ${msg.content}
+              </div>
+            </div>
+          `;
+        });
+        
+        chatHistoryList.innerHTML = html;
+        
+        // Thêm CSS cho các tin nhắn
+        const styleId = "chat-history-styles";
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement("style");
+          style.id = styleId;
+          style.textContent = `
+            .user-message {
+              background-color: #e6f7ff;
+              border-left: 4px solid #1890ff;
+            }
+            .system-message {
+              background-color: #f6f6f6;
+              border-left: 4px solid #52c41a;
+            }
+            .message-header {
+              font-size: 0.8rem;
+              margin-bottom: 5px;
+            }
+            .message-content {
+              white-space: pre-wrap;
+            }
+          `;
+          document.head.appendChild(style);
+        }
+        
+        showToast(`Đã tải ${messages.length} tin nhắn`, "info");
+      } else {
+        chatHistoryList.innerHTML = `
+          <div class="alert alert-warning">Không tìm thấy lịch sử chat</div>
+        `;
+      }
+    })
+    .catch(error => {
+      console.error("Error loading chat history:", error);
+      chatHistoryList.innerHTML = `
+        <div class="alert alert-danger">Lỗi khi tải lịch sử chat: ${error.message || "Lỗi không xác định"}</div>
+      `;
+    });
 }
