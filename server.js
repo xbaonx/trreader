@@ -811,7 +811,7 @@ app.post('/api/webhook', async (req, res) => {
     }
     
     // Tạo nội dung tin nhắn của người dùng
-    const userMessage = req.body.query || `Làm ơn đọc bài tarot cho tôi với ${actualCardCount} lá bài`;
+    const userMessage = req.body['last user freeform input'] || `Làm ơn đọc bài tarot cho tôi với ${actualCardCount} lá bài`;
     
     // Tạo session mới - đã có kết quả GPT nhưng chưa thanh toán
     const newSession = db.addSession({
@@ -892,14 +892,14 @@ app.post('/api/webhook/follow-up', async (req, res) => {
   try {
     // Lấy và xử lý dữ liệu từ Chatfuel, loại bỏ giá trị 'null' dạng chuỗi
     const rawUid = req.body.uid;
-    const rawQuery = req.body.query;
+    const rawLastUserInput = req.body['last user freeform input'];
     
     const uid = rawUid && rawUid !== 'null' ? rawUid : null;
-    const query = rawQuery && rawQuery !== 'null' ? rawQuery : '';
+    const userMessage = rawLastUserInput && rawLastUserInput !== 'null' ? rawLastUserInput : '';
     
     // Log để debug
-    console.log(`Raw follow-up data: uid=${rawUid}, query=${rawQuery}`);
-    console.log(`Processed follow-up data: uid=${uid}, query=${query}`);
+    console.log(`Raw follow-up data: uid=${rawUid}, last_user_input=${rawLastUserInput}`);
+    console.log(`Processed follow-up data: uid=${uid}, userMessage=${userMessage}`);
     
     if (!uid) {
       return res.json({
@@ -907,7 +907,14 @@ app.post('/api/webhook/follow-up', async (req, res) => {
       });
     }
     
-    console.log(`Follow-up question for user ${uid}: ${query}`);
+    // Nếu không có tin nhắn từ người dùng, trả về thông báo
+    if (!userMessage) {
+      return res.json({
+        "messages": [{ "text": "Vui lòng gửi câu hỏi của bạn" }]
+      });
+    }
+    
+    console.log(`Follow-up question for user ${uid}: ${userMessage}`);
     
     // Lấy phiên mới nhất của người dùng dựa trên uid
     const sessionData = db.getLatestSessionByUid(uid);
@@ -919,7 +926,7 @@ app.post('/api/webhook/follow-up', async (req, res) => {
     
     // Thêm câu hỏi của người dùng vào lịch sử chat
     const session_id = sessionData.id;
-    await gpt.addToChatHistory(session_id, 'user', query);
+    await gpt.addToChatHistory(session_id, 'user', userMessage);
     
     // Lấy lịch sử chat hiện tại
     const chatHistory = gpt.getChatHistory(session_id);
