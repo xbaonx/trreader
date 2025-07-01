@@ -13,6 +13,7 @@ const multer = require('multer');
 const { createObjectCsvWriter } = require('csv-writer');
 const db = require('./db');
 const gpt = require('./gpt');
+const premium = require('./premium');
 const imageService = require('./image-service');
 const adminRoutes = require('./admin-routes');
 
@@ -590,15 +591,24 @@ app.post('/draw', async (req, res) => {
       // Không báo lỗi cho client, tiếp tục xử lý
     }
     
-    // Tạo session mới
+    // Tạo nội dung tin nhắn của người dùng dựa trên các lá bài được chọn
+    const userMessage = `Làm ơn đọc bài tarot cho tôi. Các lá bài được rút: ${selectedCards.map(card => card.name).join(', ')}`;
+    
+    // Tạo phiên mới
     const newSession = db.addSession({
       uid,
-      full_name,
+      name: full_name,
       dob, 
       cards: selectedCards,
       compositeImage: compositeImageUrl,
       paid: false,
       gptResult: null,
+      // Khởi tạo lịch sử chat với tin nhắn đầu tiên là của người dùng
+      chatHistory: [{
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date().toISOString()
+      }]
     });
     
     // Trả về thông tin các lá bài
@@ -674,6 +684,12 @@ app.post('/api/webhook', async (req, res) => {
     const uid = req.body.uid || req.body['messenger user id'];
     // Chỉ lấy cardCount và bỏ qua full_name và dob
     const cardCount = req.body.cardCount || 3;
+    // Lấy session_id nếu có để hỗ trợ lịch sử chat
+    const session_id = req.body.session_id;
+    // Lấy query từ người dùng (nếu có)
+    const userQuery = req.body.query || '';
+    
+    console.log(`Webhook request: uid=${uid}, session_id=${session_id}, query=${userQuery}`);
     
     if (!uid) {
       return res.json({
@@ -747,12 +763,51 @@ app.post('/api/webhook', async (req, res) => {
     let gptResult = null;
     try {
       console.log('Lấy kết quả đọc bài từ GPT...');
-      gptResult = await gpt.generateTarotReading(selectedCards, { name: uid });
+      
+      // Lấy lịch sử chat của người dùng
+      let userHistory = [];
+      
+      // Nếu có session_id, lấy lịch sử chat từ session đó
+      if (session_id) {
+        const currentSession = db.getSessionById(session_id);
+        if (currentSession && currentSession.chatHistory) {
+          console.log(`Lấy lịch sử chat từ session hiện tại ${session_id} (${currentSession.chatHistory.length} tin nhắn)`);
+          userHistory = [...currentSession.chatHistory];
+          
+          // Thêm tin nhắn mới của người dùng vào lịch sử chat nếu có
+          if (userQuery) {
+            console.log(`Thêm tin nhắn mới của người dùng vào lịch sử: ${userQuery}`);
+            await gpt.addToChatHistory(session_id, 'user', userQuery);
+            userHistory.push({
+              role: 'user',
+              content: userQuery,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+      } 
+      // Nếu không có session_id, lấy lịch sử chat từ phiên gần nhất
+      else {
+        const previousSession = db.getLatestSessionByUid(uid);
+        if (previousSession && previousSession.chatHistory) {
+          console.log(`Lấy lịch sử chat từ phiên trước đó của người dùng ${uid}`);
+          userHistory = [...previousSession.chatHistory];
+        }
+      } 
+      
+      gptResult = await gpt.generateTarotReading(selectedCards, { name: uid }, userHistory);
       console.log('Kết quả GPT:', gptResult.substring(0, 100) + '...');
+      
+      // Lưu kết quả vào lịch sử chat
+      await gpt.addToChatHistory(newSession.id, 'assistant', gptResult);
+      
     } catch (gptError) {
       console.error('Lỗi khi lấy kết quả từ GPT:', gptError);
       // Tiếp tục với gptResult = null
     }
+    
+    // Tạo nội dung tin nhắn của người dùng
+    const userMessage = req.body.query || `Làm ơn đọc bài tarot cho tôi với ${actualCardCount} lá bài`;
     
     // Tạo session mới - đã có kết quả GPT nhưng chưa thanh toán
     const newSession = db.addSession({
@@ -761,6 +816,19 @@ app.post('/api/webhook', async (req, res) => {
       compositeImage: compositeImageUrl,
       paid: false, // Chưa đánh dấu thanh toán vì người dùng chưa trả tiền
       gptResult: gptResult,
+      // Khởi tạo lịch sử chat với tin nhắn của người dùng và phản hồi của GPT
+      chatHistory: [
+        {
+          role: 'user',
+          content: userMessage,
+          timestamp: new Date().toISOString()
+        },
+        ...(gptResult ? [{
+          role: 'assistant',
+          content: gptResult,
+          timestamp: new Date().toISOString()
+        }] : [])
+      ]
     });
     
     // Chuẩn bị URL cho Chatfuel
@@ -771,19 +839,19 @@ app.post('/api/webhook', async (req, res) => {
     // Trả về thông tin theo định dạng Chatfuel
     // Không gửi từng ảnh lá bài riêng nữa
     
-    // Khởi tạo mảng messages trống
-    const messages = [];
+    // Khởi tạo mảng webhookMessages trống
+    const webhookMessages = [];
     
     // Thêm kết quả GPT vào response nếu có
     if (gptResult) {
-      messages.push({ "text": gptResult });
+      webhookMessages.push({ "text": gptResult });
     } else {
-      messages.push({ "text": "Không thể lấy kết quả đọc bài. Vui lòng thử lại sau." });
+      webhookMessages.push({ "text": "Không thể lấy kết quả đọc bài. Vui lòng thử lại sau." });
     }
     
     // Thêm ảnh ghép vào response nếu có
     if (compositeImageUrl) {
-      messages.push({
+      webhookMessages.push({
         "attachment": {
           "type": "image",
           "payload": {
@@ -796,7 +864,7 @@ app.post('/api/webhook', async (req, res) => {
     // Không thêm nút xem kết quả nữa
     
     res.json({
-      "messages": messages,
+      "messages": webhookMessages,
       "session_id": newSession.id
     });
     
@@ -810,6 +878,140 @@ app.post('/api/webhook', async (req, res) => {
   }
 });
 
+
+/**
+ * Webhook API cho chat tiếp theo sau khi đọc bài
+ * POST /api/webhook/follow-up
+ */
+app.post('/api/webhook/follow-up', async (req, res) => {
+  try {
+    const { session_id, query, uid } = req.body;
+    
+    if (!session_id || !query) {
+      return res.json({
+        "messages": [{ "text": "Thiếu thông tin cần thiết" }],
+        "session_id": session_id || ''
+      });
+    }
+    
+    console.log(`Follow-up question for session ${session_id}: ${query}`);
+    
+    // Lấy thông tin phiên
+    const sessionData = db.getSessionById(session_id);
+    if (!sessionData) {
+      return res.json({
+        "messages": [{ "text": "Không tìm thấy phiên chat" }],
+        "session_id": session_id
+      });
+    }
+    
+    // Thêm câu hỏi của người dùng vào lịch sử chat
+    await gpt.addToChatHistory(session_id, 'user', query);
+    
+    // Lấy lịch sử chat hiện tại
+    const chatHistory = gpt.getChatHistory(session_id);
+    
+    // Đánh giá xem câu hỏi này có cần premium hay không TRƯỚC khi gọi API GPT
+    console.log('Evaluating if this conversation needs premium...');
+    const premiumEvaluation = await premium.evaluateNeedForPremium(session_id);
+    
+    // Cập nhật trạng thái premium của session nếu cần
+    if (premiumEvaluation.needsPremium) {
+      console.log(`Session ${session_id} needs premium upgrade: ${premiumEvaluation.reason}`);
+      await premium.updateSessionPremiumStatus(session_id, true);
+    }
+    
+    // Lấy session đã được cập nhật để kiểm tra trạng thái premium
+    const updatedSession = db.getSessionById(session_id);
+    const needsPremium = updatedSession?.needsPremium === true;
+    
+    // Nếu người dùng cần premium nhưng chưa thanh toán, đưa ra thông báo giới hạn
+    let response;
+    if (needsPremium && !updatedSession.paid) {
+      // Chuẩn bị phản hồi giới hạn cho người dùng free
+      response = "Dựa trên lịch sử chat của bạn, câu hỏi này yêu cầu phân tích chuyên sâu hơn. Vui lòng nâng cấp tài khoản Premium để nhận được câu trả lời chi tiết từ chuyên gia tarot.";
+      
+      // Lưu phản hồi vào lịch sử chat
+      await gpt.addToChatHistory(session_id, 'assistant', response);
+    } else {
+      // Xử lý câu hỏi bình thường với GPT nếu không cần premium hoặc đã thanh toán
+      const config = db.getConfig();
+      const model = config.model || 'gpt-3.5-turbo';
+      
+      // Tạo prompt hệ thống
+      const systemPrompt = `Bạn là chuyên gia tarot reader. Hãy trả lời câu hỏi của người dùng dựa trên kết quả đọc bài tarot đã được cung cấp trước đó. Bạn có thể truy cập vào tất cả các tin nhắn trong lịch sử chat.`;
+      
+      // Tạo messages gửi tới OpenAI
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...chatHistory
+      ];
+      
+      console.log(`Sending ${messages.length} messages to OpenAI, including system prompt`);
+      
+      // Gọi OpenAI API
+      try {
+        const openai = require('./gpt').openai;
+        const completion = await openai.chat.completions.create({
+          model: model,
+          messages: messages,
+          temperature: 0.7
+        });
+        
+        response = completion.choices[0].message.content;
+        
+        // Lưu phản hồi vào lịch sử chat
+        await gpt.addToChatHistory(session_id, 'assistant', response);
+        
+      } catch (error) {
+        console.error('Error getting follow-up response:', error);
+        response = "Rất tiếc, tôi không thể xử lý câu hỏi của bạn lúc này. Vui lòng thử lại sau.";
+        await gpt.addToChatHistory(session_id, 'assistant', response);
+      }
+    }
+    
+    // Tạo followupMessages cho response
+    const followupMessages = [{ "text": response }];
+    
+    // Nếu cần premium, thêm thông báo nâng cấp
+    if (needsPremium && !updatedSession.paid) {
+      followupMessages.push({ 
+        "text": "\n\n⭐️ *Để nhận được phân tích chuyên sâu hơn về các lá bài tarot và trả lời chi tiết hơn cho câu hỏi của bạn, bạn cần nâng cấp lên tài khoản Premium.* ⭐️" 
+      });
+      
+      // Thêm nút nâng cấp
+      followupMessages.push({
+        "attachment": {
+          "type": "template",
+          "payload": {
+            "template_type": "button",
+            "text": "Nâng cấp ngay để nhận phân tích từ Chuyên gia Tarot",
+            "buttons": [
+              {
+                "type": "web_url",
+                "url": `${process.env.PAYMENT_URL || 'https://tarot.example.com/upgrade'}?session_id=${session_id}`,
+                "title": "Nâng cấp Premium"
+              }
+            ]
+          }
+        }
+      });
+    }
+    
+    // Trả về kết quả
+    res.json({
+      "messages": followupMessages,
+      "session_id": session_id,
+      "needs_premium": needsPremium
+    });
+    
+  } catch (error) {
+    console.error('Error in follow-up API:', error);
+    res.json({
+      "messages": [{ "text": "Đã xảy ra lỗi khi xử lý yêu cầu của bạn. Vui lòng thử lại sau." }]
+    });
+  }
+});
 
 /**
  * Webhook API Trả kết quả đọc bài
@@ -872,6 +1074,13 @@ app.post('/api/webhook/result', async (req, res) => {
       // Thêm kết quả GPT
       messages.push({ "text": sessionData.gptResult });
       
+      // Đảm bảo tin nhắn của người dùng và kết quả được lưu vào lịch sử
+      // Lấy tin nhắn từ người dùng (nếu có)
+      const userQuery = req.body.query || '';
+      if (userQuery) {
+        await gpt.addToChatHistory(session_id, 'user', userQuery);
+      }
+      
       // Thêm ảnh ghép vào response nếu có
       if (sessionData.compositeImageUrl) {
         messages.push({ "text": "👆 Here are your three tarot cards" });
@@ -922,7 +1131,8 @@ app.post('/api/webhook/result', async (req, res) => {
     
     // Trả về kết quả theo định dạng Chatfuel
     res.json({
-      "messages": messages
+      "messages": messages,
+      "session_id": session_id // Trả về session_id để hỗ trợ lịch sử chat
     });
     
   } catch (error) {

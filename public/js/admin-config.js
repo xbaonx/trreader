@@ -17,6 +17,7 @@ function loadConfig() {
         // Cập nhật giao diện
         document.getElementById('promptText').value = config.prompt || '';
         document.getElementById('templateText').value = config.responseTemplate || '';
+        document.getElementById('premiumPrompt').value = config.premiumPrompt || '';
         document.getElementById('defaultCardCount').value = config.defaultCardCount || 3;
         
         // Cập nhật cài đặt model
@@ -100,6 +101,26 @@ function bindConfigEvents() {
         .catch(error => {
           console.error('Error saving prompt config:', error);
           showToast('Lỗi khi lưu cấu hình prompt', 'danger');
+        });
+    });
+  }
+  
+  // Save premium prompt
+  const btnSavePremiumPrompt = document.getElementById('btnSavePremiumPrompt');
+  if (btnSavePremiumPrompt) {
+    btnSavePremiumPrompt.addEventListener('click', () => {
+      const premiumPrompt = document.getElementById('premiumPrompt').value;
+      
+      axios.post('/admin/config', { premiumPrompt })
+        .then(response => {
+          if (response.data && response.data.success) {
+            state.config.premiumPrompt = premiumPrompt;
+            showToast('Đã lưu cấu hình Premium Prompt thành công!', 'success');
+          }
+        })
+        .catch(error => {
+          console.error('Error saving premium prompt config:', error);
+          showToast('Lỗi khi lưu cấu hình Premium Prompt', 'danger');
         });
     });
   }

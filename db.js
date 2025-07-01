@@ -11,6 +11,7 @@
  * - cards: Các lá bài được rút
  * - paid: Trạng thái thanh toán
  * - gptResult: Kết quả đọc bài từ GPT
+ * - chatHistory: Lịch sử chat giữa người dùng và GPT
  */
 
 const fs = require('fs-extra');
@@ -40,6 +41,16 @@ const DEFAULT_DB = {
 
 ## Kết luận
 [Đưa ra kết luận về tổng thể phiên đọc bài]`,
+    premiumPrompt: `Bạn là người đánh giá xem người dùng có nhu cầu nâng cấp lên tài khoản premium hay không. 
+    Hãy phân tích lịch sử chat và xác định xem người dùng có đang yêu cầu:
+    1. Thông tin chi tiết và chuyên sâu về các lá bài tarot
+    2. Giải thích chuyên sâu về ý nghĩa của các lá bài trong bối cảnh riêng của họ
+    3. Thông tin về các mối quan hệ cụ thể giữa các lá bài
+    4. Những phân tích theo thời gian hoặc tương lai xa
+    5. Các câu hỏi cụ thể liên quan đến tình yêu, sự nghiệp, tài chính mà cần phân tích sâu
+    
+    Nếu người dùng hỏi các câu hỏi cơ bản về ý nghĩa tổng quát, đó là dịch vụ miễn phí.
+    Nếu họ đi sâu vào chi tiết và cần các phân tích chuyên nghiệp, họ cần nâng cấp lên premium.`,
     defaultCardCount: 3,
     model: 'gpt-3.5-turbo',
     models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']
@@ -64,7 +75,7 @@ function ensureDataStructure() {
     return true;
   } catch (error) {
     console.error('Error ensuring data structure:', error);
-    // Nếu là môi trường phát triển local, tạo thư mục tạm thời
+    // Nếu là môi trường phát triển local, tạo thư mục tạm thởi
     try {
       const tempDir = path.join(__dirname, 'temp_data');
       fs.ensureDirSync(tempDir);
@@ -105,7 +116,7 @@ function createBackup() {
       // Giữ tối đa 10 file backup gần nhất
       const backups = fs.readdirSync(BACKUP_DIR)
         .filter(file => file.startsWith('db_') && file.endsWith('.json'))
-        .sort((a, b) => b.localeCompare(a)); // Sắp xếp theo thời gian giảm dần
+        .sort((a, b) => b.localeCompare(a)); // Sắp xếp theo thởi gian giảm dần
       
       if (backups.length > 10) {
         for (let i = 10; i < backups.length; i++) {
@@ -169,7 +180,7 @@ function getLatestSessionByUid(uid) {
   
   if (userSessions.length === 0) return null;
   
-  // Sắp xếp theo thời gian giảm dần và lấy session mới nhất
+  // Sắp xếp theo thởi gian giảm dần và lấy session mới nhất
   return userSessions.sort((a, b) => 
     new Date(b.timestamp) - new Date(a.timestamp)
   )[0];
@@ -177,7 +188,7 @@ function getLatestSessionByUid(uid) {
 
 /**
  * Thêm một session mới
- * @param {Object} session - Session cần thêm
+ * @param {Object} sessionData - Dữ liệu session cần thêm
  * @returns {Object} Session đã thêm với ID mới
  */
 function addSession(sessionData) {
@@ -186,13 +197,15 @@ function addSession(sessionData) {
   const newSession = {
     id: uuidv4(),
     uid: sessionData.uid,
-    full_name: sessionData.full_name || 'Khách',  // Họ tên đầy đủ
+    name: sessionData.name || '',                   // Họ tên
     dob: sessionData.dob || '',                   // Ngày sinh
     timestamp: new Date().toISOString(),
     cards: sessionData.cards,
     compositeImage: sessionData.compositeImage || null, // Ảnh ghép các lá bài
     paid: sessionData.paid || false,
     gptResult: sessionData.gptResult || null,
+    chatHistory: sessionData.chatHistory || [], // Khởi tạo lịch sử chat rỗng
+    needsPremium: sessionData.needsPremium || false // Trường mới đánh dấu nếu phiên này cần nâng cấp lên premium
   };
   
   db.sessions.push(newSession);
@@ -217,6 +230,19 @@ function updateSession(id, updatedData) {
   if (updatedData.gptResult) {
     db.sessions[index].gptResult = updatedData.gptResult;
     db.sessions[index].editedAt = new Date().toISOString();
+  }
+  // Cập nhật lịch sử chat nếu có
+  if (updatedData.chatHistory) {
+    // Nếu chưa có chatHistory thì khởi tạo mảng rỗng
+    if (!db.sessions[index].chatHistory) db.sessions[index].chatHistory = [];
+    // Nếu updatedData.chatHistory là mảng thì nối vào mảng hiện tại
+    if (Array.isArray(updatedData.chatHistory)) {
+      db.sessions[index].chatHistory = [...db.sessions[index].chatHistory, ...updatedData.chatHistory];
+    }
+    // Nếu là một message đơn lẻ thì thêm vào mảng
+    else {
+      db.sessions[index].chatHistory.push(updatedData.chatHistory);
+    }
   }
   // Thêm hỗ trợ trường basicResult cho kết quả đọc bài cơ bản (miễn phí)
   if (updatedData.basicResult) {

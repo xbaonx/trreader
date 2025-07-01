@@ -367,7 +367,8 @@ module.exports = function(db, gpt, upload, generateTarotPDF, pdfDir) {
         responseTemplate, 
         defaultCardCount, 
         model,
-        defaultUserInfo
+        defaultUserInfo,
+        premiumPrompt
       } = req.body;
       
       // Tạo đối tượng cấu hình để cập nhật
@@ -379,6 +380,7 @@ module.exports = function(db, gpt, upload, generateTarotPDF, pdfDir) {
       if (defaultCardCount !== undefined) configUpdate.defaultCardCount = parseInt(defaultCardCount, 10) || 3;
       if (model !== undefined) configUpdate.model = model;
       if (defaultUserInfo !== undefined) configUpdate.defaultUserInfo = defaultUserInfo;
+      if (premiumPrompt !== undefined) configUpdate.premiumPrompt = premiumPrompt;
       
       // Cập nhật cấu hình
       db.updateConfig(configUpdate);
