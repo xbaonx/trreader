@@ -60,10 +60,10 @@ async function evaluateNeedForPremium(sessionId) {
     // Lấy tối đa 10 tin nhắn gần nhất để đánh giá
     const recentMessages = chatHistory.slice(-10);
     
-    // Chuẩn bị prompt cho GPT
+    // Chuẩn bị prompt cho GPT (thêm từ "json" để hỗ trợ response_format)
     const messages = [
-      { role: "system", content: premiumPrompt },
-      { role: "user", content: `Đánh giá lịch sử chat sau và xác định xem người dùng có cần nâng cấp lên premium không:\n\n${JSON.stringify(recentMessages)}` }
+      { role: "system", content: premiumPrompt + " Trả về kết quả dạng JSON với các trường needsPremium và reason." },
+      { role: "user", content: `Đánh giá lịch sử chat sau và xác định xem người dùng có cần nâng cấp lên premium không. Trả lời dạng JSON:\n\n${JSON.stringify(recentMessages)}` }
     ];
 
     // Gọi API OpenAI
