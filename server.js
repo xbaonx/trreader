@@ -685,14 +685,14 @@ app.post('/api/webhook', async (req, res) => {
     // Lấy tên và ngày sinh từ request
     const first_name = req.body.first_name || req.body['first name'] || '';
     const last_name = req.body.last_name || req.body['last name'] || '';
-    const name = req.body.name || (first_name && last_name ? `${first_name} ${last_name}` : first_name || 'Khách hàng');
-    const dob = req.body.dob || 'không xác định';
+    const name = req.body.name && req.body.name !== 'null' ? req.body.name : (first_name && last_name ? `${first_name} ${last_name}` : first_name || 'Khách hàng');
+    const dob = req.body.dob && req.body.dob !== 'null' ? req.body.dob : 'không xác định';
     // Chỉ lấy cardCount và bỏ qua full_name và dob
     const cardCount = req.body.cardCount || 3;
     // Lấy session_id nếu có để hỗ trợ lịch sử chat
-    const session_id = req.body.session_id;
+    const session_id = req.body.session_id && req.body.session_id !== 'null' ? req.body.session_id : null;
     // Lấy query từ người dùng (nếu có)
-    const userQuery = req.body.query || '';
+    const userQuery = req.body.query && req.body.query !== 'null' ? req.body.query : '';
     
     console.log(`Webhook request: uid=${uid}, session_id=${session_id}, query=${userQuery}`);
     
@@ -890,11 +890,20 @@ app.post('/api/webhook', async (req, res) => {
  */
 app.post('/api/webhook/follow-up', async (req, res) => {
   try {
-    const { query, uid } = req.body;
+    // Lấy và xử lý dữ liệu từ Chatfuel, loại bỏ giá trị 'null' dạng chuỗi
+    const rawUid = req.body.uid;
+    const rawQuery = req.body.query;
     
-    if (!uid || !query) {
+    const uid = rawUid && rawUid !== 'null' ? rawUid : null;
+    const query = rawQuery && rawQuery !== 'null' ? rawQuery : '';
+    
+    // Log để debug
+    console.log(`Raw follow-up data: uid=${rawUid}, query=${rawQuery}`);
+    console.log(`Processed follow-up data: uid=${uid}, query=${query}`);
+    
+    if (!uid) {
       return res.json({
-        "messages": [{ "text": "Thiếu thông tin cần thiết" }]
+        "messages": [{ "text": "Thiếu thông tin người dùng" }]
       });
     }
     
