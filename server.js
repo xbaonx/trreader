@@ -870,8 +870,7 @@ app.post('/api/webhook', async (req, res) => {
     // Không thêm nút xem kết quả nữa
     
     res.json({
-      "messages": webhookMessages,
-      "session_id": newSession.id
+      "messages": webhookMessages
     });
     
   } catch (error) {
@@ -891,27 +890,26 @@ app.post('/api/webhook', async (req, res) => {
  */
 app.post('/api/webhook/follow-up', async (req, res) => {
   try {
-    const { session_id, query, uid } = req.body;
+    const { query, uid } = req.body;
     
-    if (!session_id || !query) {
+    if (!uid || !query) {
       return res.json({
-        "messages": [{ "text": "Thiếu thông tin cần thiết" }],
-        "session_id": session_id || ''
+        "messages": [{ "text": "Thiếu thông tin cần thiết" }]
       });
     }
     
-    console.log(`Follow-up question for session ${session_id}: ${query}`);
+    console.log(`Follow-up question for user ${uid}: ${query}`);
     
-    // Lấy thông tin phiên
-    const sessionData = db.getSessionById(session_id);
+    // Lấy phiên mới nhất của người dùng dựa trên uid
+    const sessionData = db.getLatestSessionByUid(uid);
     if (!sessionData) {
       return res.json({
-        "messages": [{ "text": "Không tìm thấy phiên chat" }],
-        "session_id": session_id
+        "messages": [{ "text": "Không tìm thấy phiên chat cho người dùng này" }]
       });
     }
     
     // Thêm câu hỏi của người dùng vào lịch sử chat
+    const session_id = sessionData.id;
     await gpt.addToChatHistory(session_id, 'user', query);
     
     // Lấy lịch sử chat hiện tại
@@ -995,7 +993,8 @@ app.post('/api/webhook/follow-up', async (req, res) => {
             "buttons": [
               {
                 "type": "web_url",
-                "url": `${process.env.PAYMENT_URL || 'https://tarot.example.com/upgrade'}?session_id=${session_id}`,
+                "url": `${process.env.PAYMENT_URL || 'https://tarot.example.com/upgrade'}?uid=${uid}`,
+
                 "title": "Nâng cấp Premium"
               }
             ]
@@ -1004,10 +1003,9 @@ app.post('/api/webhook/follow-up', async (req, res) => {
       });
     }
     
-    // Trả về kết quả
+    // Trả về kết quả - không cần trả về session_id nữa
     res.json({
       "messages": followupMessages,
-      "session_id": session_id,
       "needs_premium": needsPremium
     });
     
@@ -1025,22 +1023,22 @@ app.post('/api/webhook/follow-up', async (req, res) => {
  */
 app.post('/api/webhook/result', async (req, res) => {
   try {
-    const { session_id } = req.body;
+    const { uid } = req.body;
     
-    if (!session_id) {
+    if (!uid) {
       return res.json({
         "messages": [
-          { "text": "Thiếu thông tin phiên đọc bài" }
+          { "text": "Thiếu thông tin người dùng" }
         ]
       });
     }
     
-    const sessionData = db.getSessionById(session_id);
+    const sessionData = db.getLatestSessionByUid(uid);
     
     if (!sessionData) {
       return res.json({
         "messages": [
-          { "text": "Không tìm thấy phiên đọc bài" }
+          { "text": "Không tìm thấy phiên đọc bài cho người dùng này" }
         ]
       });
     }
@@ -1084,7 +1082,7 @@ app.post('/api/webhook/result', async (req, res) => {
       // Lấy tin nhắn từ người dùng (nếu có)
       const userQuery = req.body.query || '';
       if (userQuery) {
-        await gpt.addToChatHistory(session_id, 'user', userQuery);
+        await gpt.addToChatHistory(sessionData.id, 'user', userQuery);
       }
       
       // Thêm ảnh ghép vào response nếu có
